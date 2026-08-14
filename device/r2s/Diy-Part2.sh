@@ -1,31 +1,54 @@
 #!/bin/bash
-# =========================================================
-# DIY Script Part 2: 预处理配置与自定义文件注入
-# 适用目标: FriendlyARM NanoPi R2S (ImmortalWrt 25.12)
-# =========================================================
 
 echo "==> [Diy-Part2] 开始执行 R2S 编译前预处理..."
 
 # ---------------------------------------------------------
-# 1. 注入根目录的 files 自定义配置文件
+# 1. 注入 files
 # ---------------------------------------------------------
-# 判断逻辑：检测上级目录中的 files 文件夹是否存在，且内部包含实际内容
+
 if [ -d "../files" ] && [ "$(ls -A ../files 2>/dev/null)" ]; then
-    echo "==> 检测到自定义 files 目录，正在注入..."
-    
-    # 在当前源码根目录 (immortalwrt) 中创建 ./files 目标文件夹
+
+    echo "==> 检测到自定义 files，正在注入..."
+
     mkdir -p ./files
-    
-    # 平铺复制内容，避开双层文件夹嵌套陷阱
+
     cp -rf ../files/. ./files/
+
+else
+
+    echo "==> 未发现自定义 files"
+
 fi
 
+
 # ---------------------------------------------------------
-# 2. 清理 Git 补丁冲突遗留的垃圾文件 (.orig / .rej)
+# 2. 检查 APK 配置是否存在
 # ---------------------------------------------------------
-# 避免垃圾文件被打入固件浪费存储空间或引发内核异常
-echo "==> 清理临时冲突文件 (.orig / .rej)..."
+
+echo "==> 检查 APK 预置文件..."
+
+if [ -f "./files/etc/apk/repositories.d/customfeeds.list" ]; then
+    echo "OK: APK repository 已预置"
+else
+    echo "WARNING: 未发现 APK repository"
+fi
+
+
+if [ -d "./files/etc/apk/keys" ]; then
+    echo "OK: APK keys 目录存在"
+else
+    echo "WARNING: 未发现 APK keys"
+fi
+
+
+# ---------------------------------------------------------
+# 3. 清理垃圾文件
+# ---------------------------------------------------------
+
+echo "==> 清理 .orig / .rej"
+
 find ./ -name "*.orig" -exec rm -f {} +
 find ./ -name "*.rej" -exec rm -f {} +
 
-echo "==> [Diy-Part2] 预处理完成！"
+
+echo "==> [Diy-Part2] 完成"
