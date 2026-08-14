@@ -5,8 +5,11 @@ on:
     inputs:
       ssh:
         description: "是否开启 SSH 远程调试 (tmate)"
+
         required: false
+
         type: boolean
+
         default: false
 
 permissions:
@@ -14,26 +17,31 @@ permissions:
 
 jobs:
   build:
-    # ImmortalWrt 官方推荐稳定环境
-    # Ubuntu 22.04 兼容性最佳
+    # ImmortalWrt 官方推荐环境
+    # Ubuntu 22.04 稳定兼容
+
     runs-on: ubuntu-22.04
 
     steps:
       # =====================================================
-      # 0. 获取当前 YAIF 仓库
+      # 0. Checkout YAIF 仓库
       # =====================================================
+
       - name: "步骤 0：Checkout YAIF 配置仓库"
+
         uses: actions/checkout@v4
 
       # =====================================================
       # 1. 安装编译依赖
-      #
-      # 对齐 ImmortalWrt/OpenWrt 官方编译环境
       # =====================================================
+
       - name: "步骤 1：初始化 Ubuntu 22.04 编译环境"
+
         env:
           DEBIAN_FRONTEND: noninteractive
+
         run: |
+
 
           sudo rm -rf \
             /etc/apt/sources.list.d/* \
@@ -41,10 +49,14 @@ jobs:
             /usr/local/lib/android \
             /opt/ghc
 
+
+
           sudo apt-get update -y
 
 
+
           sudo apt-get install -y \
+
             ack \
             antlr3 \
             asciidoc \
@@ -119,68 +131,85 @@ jobs:
             zlib1g-dev \
             zstd
 
+
+
           sudo apt-get clean
 
       # =====================================================
-      # 2. 拉取 ImmortalWrt 25.12.1 源码
+      # 2. Clone ImmortalWrt 25.12.1
+      #
+      # 使用浅克隆
+      # 避免 tag warning
       # =====================================================
+
       - name: "步骤 2：Clone ImmortalWrt v25.12.1"
 
         run: |
 
+
           git clone \
-            -b v25.12.1 \
-            --single-branch \
-            --filter=blob:none \
+
+            --depth=1 \
+
+            --branch v25.12.1 \
+
             https://github.com/immortalwrt/immortalwrt \
+
             immortalwrt
 
       # =====================================================
       # 3. 更新 feeds
       #
-      # 包括：
-      # - 官方 packages
-      # - luci
-      # - nikki
-      #
-      # Nikki feed 由 Diy-Part1 注入
+      # 注入 Nikki feed
       # =====================================================
+
       - name: "步骤 3：执行 Diy-Part1 并安装 feeds"
 
         run: |
 
+
           cd immortalwrt
+
 
 
           chmod +x ../device/r2s/Diy-Part1.sh
 
 
+
           ../device/r2s/Diy-Part1.sh
+
 
 
           ./scripts/feeds update -a
 
 
+
           ./scripts/feeds install -a
 
+
+
+
+          echo "===== CHECK NIKKI FEED ====="
+
+
+
+          grep -R "mihomo" feeds/nikki || true
+
       # =====================================================
-      # 4. 注入自定义文件
-      #
-      # 包括：
-      # - 默认配置
-      # - 网络配置
-      # - 启动脚本
-      #
-      # 不影响 .config
+      # 4. 注入 files
       # =====================================================
-      - name: "步骤 4：执行 Diy-Part2 注入 files"
+
+      - name: "步骤 4：执行 Diy-Part2"
 
         run: |
+
 
           cd immortalwrt
 
 
+
           chmod +x ../device/r2s/Diy-Part2.sh
+
 
 
           ../device/r2s/Diy-Part2.sh
@@ -188,84 +217,103 @@ jobs:
       # =====================================================
       # 5. 应用 config.seed
       #
-      # 这是 YAIF 核心配置入口
-      #
-      # 流程：
-      #
-      # config.seed
-      #      |
-      #      v
-      # make defconfig
-      #      |
-      #      v
-      # .config
-      #
+      # 唯一配置入口
       # =====================================================
-      - name: "步骤 5：应用 R2S config.seed 并生成 .config"
+
+      - name: "步骤 5：应用 R2S config.seed"
 
         run: |
 
+
           cd immortalwrt
+
+
+
+          rm -f .config
+
 
 
           cp ../device/r2s/config.seed .config
 
 
+
           make defconfig
 
       # =====================================================
-      # 6. 验证最终 .config
-      #
-      # 检查：
-      # - R2S target
-      # - Nikki
-      # - Mihomo Meta
-      # - Daed
-      # - BTF
-      #
-      # 防止旧配置污染
+      # 6. 最终配置检查
       # =====================================================
-      - name: "步骤 6：检查最终配置"
+
+      - name: "步骤 6：检查最终 .config"
 
         run: |
+
 
           cd immortalwrt
 
 
+
           echo "===== TARGET ====="
+
 
           grep TARGET .config || true
 
 
 
-          echo "===== PROXY CORE ====="
+
+
+          echo "===== PARTITION ====="
+
 
           grep -Ei \
-            "nikki|mihomo|daed|dae" \
-            .config || true
+
+          "TARGET_KERNEL_PARTSIZE|TARGET_ROOTFS_PARTSIZE" \
+
+          .config || true
+
+
+
+
+
+          echo "===== PROXY CORE ====="
+
+
+          grep -Ei \
+
+          "nikki|mihomo|daed|dae" \
+
+          .config || true
+
+
 
 
 
           echo "===== KERNEL BTF ====="
 
+
           grep -Ei \
-            "BTF|DEBUG_INFO" \
-            .config || true
+
+          "BTF|DEBUG_INFO" \
+
+          .config || true
+
+
 
 
 
           echo "===== OLD CONFIG CHECK ====="
 
+
           grep -Ei \
-            "opkg|iptables|r8169|mihomo-alpha" \
-            .config || true
+
+          "opkg|iptables|r8169|mihomo-alpha" \
+
+          .config || true
 
       # =====================================================
-      # 7. 保存最终 .config
-      #
-      # 方便以后排查编译问题
+      # 7. 保存最终配置
       # =====================================================
-      - name: "步骤 7：保存最终 .config"
+
+      - name: "步骤 7：上传最终 .config"
 
         uses: actions/upload-artifact@v4
 
@@ -275,10 +323,9 @@ jobs:
           path: immortalwrt/.config
 
       # =====================================================
-      # 8. SSH 调试入口
-      #
-      # 手动运行 Actions 时开启
+      # 8. SSH 调试
       # =====================================================
+
       - name: "步骤 8：SSH 远程调试"
 
         uses: mxschmitt/action-tmate@v3
@@ -289,14 +336,13 @@ jobs:
           limit-access-to-actor: false
 
       # =====================================================
-      # 9. 下载编译依赖
-      #
-      # 注意：
-      # 不再重复 make defconfig
+      # 9. 下载源码包
       # =====================================================
+
       - name: "步骤 9：预下载源码包"
 
         run: |
+
 
           cd immortalwrt
 
@@ -304,18 +350,21 @@ jobs:
           make download -j4
 
       # =====================================================
-      # 10. 编译固件
+      # 10. 编译
       #
-      # 第一次验证使用低并发：
+      # 首次验证：
       # -j2
       #
-      # 成功后可提升
+      # 成功后可提高
       # =====================================================
-      - name: "步骤 10：编译 NanoPi R2S 固件"
+
+      - name: "步骤 10：编译 NanoPi R2S"
 
         run: |
 
+
           cd immortalwrt
+
 
 
           make -j2 V=s
@@ -323,7 +372,8 @@ jobs:
       # =====================================================
       # 11. 上传固件
       # =====================================================
-      - name: "步骤 11：上传 R2S 固件"
+
+      - name: "步骤 11：上传固件"
 
         uses: actions/upload-artifact@v4
 
@@ -331,5 +381,6 @@ jobs:
           name: ImmortalWrt-NanoPi-R2S
 
           path: |
+
 
             immortalwrt/bin/targets/rockchip/armv8/*sysupgrade.img.gz
