@@ -1,0 +1,98 @@
+name: Build ImmortalWrt 25.12 for R2S
+
+on:
+  workflow_dispatch:
+    inputs:
+      ssh:
+        description: "是否开启 SSH 远程调试 (tmate)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: "步骤 0: 下载当前 GitHub 仓库中的配置与脚本"
+        uses: actions/checkout@v4
+
+      - name: "步骤 1: 初始化 Ubuntu 24.04 编译环境 (全量对齐 ImmortalWrt 官方依赖包)"
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          # 清理 GitHub Actions 自带的冗余软件，腾出磁盘空间
+          sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo apt-get update -y
+          # 安装 ImmortalWrt 官方 Quickstart 指定的全套编译依赖
+          sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib \
+            g++-multilib git gnutls-dev gperf haveged help2man intltool libc6-dev-i386 libelf-dev \
+            libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev \
+            libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano \
+            ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils \
+            python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo \
+            unzip vim wget xmlto xxd zlib1g-dev zstd
+          sudo apt-get clean
+
+      - name: "步骤 2: 拉取 ImmortalWrt 官方源码 (生成 immortalwrt 目录，颗粒度对齐官方教程)"
+        run: |
+          # 采用官方推荐的 --filter=blob:none 优化拉取效率，并指定 master 分支
+          git clone -b master --single-branch --filter=blob:none https://github.com/immortalwrt/immortalwrt immortalwrt
+
+      - name: "步骤 3 & 4: 运行 Diy-Part1.sh 并更新/安装 Feeds 软件源"
+        run: |
+          cd immortalwrt
+          # 给自定义 Part1 脚本赋予可执行权限并运行（追加 Nikki 软件源）
+          chmod +x ../device/r2s/Diy-Part1.sh
+          ../device/r2s/Diy-Part1.sh
+          # 执行官方 Feed 更新与安装指令
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: "步骤 5: 运行 Diy-Part2.sh 注入自定义 files 配置文件"
+        run: |
+          cd immortalwrt
+          # 运行 Part2 脚本，注入自定义配置并清理 patch 垃圾文件
+          chmod +x ../device/r2s/Diy-Part2.sh
+          ../device/r2s/Diy-Part2.sh
+
+      - name: "步骤 6: 应用 R2S 种子配置并生成完整的 .config"
+        run: |
+          cd immortalwrt
+          # 将 device/r2s/config.seed 覆盖至 .config 并展开补齐完整依赖
+          if [ -f "../device/r2s/config.seed" ]; then
+            cp -rf ../device/r2s/config.seed .config
+          fi
+          make defconfig
+
+      # ---------------------------------------------------------
+      # 🔍 核心 SSH 调试环节 (按需勾选触发)
+      # ---------------------------------------------------------
+      - name: "步骤 7: SSH 连接到 Actions 现场调试 (tmate)"
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ inputs.ssh == true }}
+        with:
+          limit-access-to-actor: false
+
+      - name: "步骤 8: 预下载源码依赖包 (加速后续多线程编译)"
+        run: |
+          cd immortalwrt
+          make defconfig
+          make download -j$(nproc)
+
+      - name: "步骤 9: 编译 R2S 固件 (make)"
+        run: |
+          cd immortalwrt
+          echo "开启 $(nproc) 线程多核加速编译..."
+          # 首选多线程极速编译；若因并发报错，自动切回单核 V=s 输出详细 log
+          make -j$(nproc) || make -j1 V=s
+
+      - name: "步骤 10: 整理打包固件并发布到 GitHub Artifacts"
+        uses: actions/upload-artifact@v4
+        with:
+          name: ImmortalWrt_NanoPi_R2S
+          path: immortalwrt/bin/targets/rockchip/armv8/*sysupgrade.img.gz
