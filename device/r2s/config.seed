@@ -1,43 +1,109 @@
 # =========================================================
-# NanoPi R2S 编译种子配置文件 (ImmortalWrt 25.12 APK 架构)
+# NanoPi R2S 编译种子配置文件 (ImmortalWrt 25.12.1)
+# 目标: FriendlyARM NanoPi R2S
+# 架构: Rockchip ARMv8
+# 方案: Nikki + Mihomo TUN + nftables + IPv6
 # =========================================================
 
-### 1. 目标架构与 FriendlyARM R2S 硬件驱动 ###
+
+### 1. 目标架构与 FriendlyARM R2S 硬件支持 ###
+
 CONFIG_TARGET_rockchip=y
 CONFIG_TARGET_rockchip_armv8=y
 CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r2s=y
+
+# 固件分区
 CONFIG_TARGET_KERNEL_PARTSIZE=64
 CONFIG_TARGET_ROOTFS_PARTSIZE=1024
+
+# R2S 硬件支持
 CONFIG_PACKAGE_r8152-firmware=y
 CONFIG_PACKAGE_trusted-firmware-a-rk3328=y
 
-### 2. 核心网络与 Firewall4 (nftables 架构) ###
+
+### 2. Firewall4 / nftables 网络框架 ###
+
 CONFIG_PACKAGE_firewall4=y
+
+# nftables NAT / Flow / FullCone
+CONFIG_PACKAGE_kmod-nft-nat=y
 CONFIG_PACKAGE_kmod-nft-offload=y
 CONFIG_PACKAGE_kmod-nft-fullcone=y
+
+# Conntrack 连接跟踪
+CONFIG_PACKAGE_kmod-nf-conntrack=y
+CONFIG_PACKAGE_kmod-nf-conntrack6=y
+
+# 自动性能优化
 CONFIG_PACKAGE_autocore-arm=y
+
+
+### 3. DNS 与基础网络服务 ###
+
+# 支持高级 DNS 功能
 CONFIG_PACKAGE_dnsmasq-full=y
 
-### 3. Web 管理界面与终端工具 ###
+# 完整 IP 工具
+CONFIG_PACKAGE_ip-full=y
+
+
+### 4. LuCI Web 管理界面 ###
+
 CONFIG_LUCI_LANG_zh_Hans=y
+
+CONFIG_PACKAGE_luci=y
+CONFIG_PACKAGE_luci-base=y
 CONFIG_PACKAGE_luci-compat=y
+
+# 防火墙管理界面
+CONFIG_PACKAGE_luci-app-firewall=y
+
+# Web SSH终端
 CONFIG_PACKAGE_luci-app-ttyd=y
 
-### 4. Nikki 代理核心及其官方依赖库 (对应官方 Dependencies 说明) ###
+
+### 5. Nikki / Mihomo 代理核心 ###
+
 CONFIG_PACKAGE_nikki=y
 CONFIG_PACKAGE_luci-app-nikki=y
 CONFIG_PACKAGE_luci-i18n-nikki-zh-cn=y
+
+
+### Nikki 官方依赖 ###
+
 CONFIG_PACKAGE_ca-bundle=y
 CONFIG_PACKAGE_curl=y
 CONFIG_PACKAGE_yq=y
-CONFIG_PACKAGE_ip-full=y
+
+
+### 6. TUN / TProxy 内核支持 ###
+
+# 网络诊断
 CONFIG_PACKAGE_kmod-inet-diag=y
+
+# nft透明代理
 CONFIG_PACKAGE_kmod-nft-socket=y
 CONFIG_PACKAGE_kmod-nft-tproxy=y
+
+# Mihomo TUN
 CONFIG_PACKAGE_kmod-tun=y
+
+# 虚拟接口支持
 CONFIG_PACKAGE_kmod-dummy=y
 
-### 5. 系统性能优化选项 ###
+
+### 7. IPv6 双栈支持 ###
+
+CONFIG_PACKAGE_ipv6helper=y
+CONFIG_PACKAGE_odhcp6c=y
+CONFIG_PACKAGE_odhcpd-ipv6only=y
+
+
+### 8. 系统性能优化 ###
+
+# TCP BBR
 CONFIG_PACKAGE_kmod-tcp-bbr=y
+
+# ARM64 OpenSSL优化
 CONFIG_OPENSSL_OPTIMIZE_SPEED=y
 CONFIG_OPENSSL_WITH_ASM=y

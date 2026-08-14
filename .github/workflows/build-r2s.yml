@@ -37,9 +37,12 @@ jobs:
             unzip vim wget xmlto xxd zlib1g-dev zstd
           sudo apt-get clean
 
-      - name: "步骤 2：拉取 ImmortalWrt 官方源码 (生成 immortalwrt 目录)"
+      - name: "步骤 2：拉取 ImmortalWrt v25.12.1源码"
         run: |
-          git clone -b master --single-branch --filter=blob:none https://github.com/immortalwrt/immortalwrt immortalwrt
+          git clone -b v25.12.1 \
+            --single-branch \
+            --filter=blob:none \
+            https://github.com/immortalwrt/immortalwrt immortalwrt
 
       - name: "步骤 3 & 4：运行 Diy-Part1.sh 并更新/安装 Feeds 软件源"
         run: |
