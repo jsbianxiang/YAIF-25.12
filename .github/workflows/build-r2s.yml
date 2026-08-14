@@ -20,19 +20,17 @@ jobs:
       - name: "步骤 0: 下载当前 GitHub 仓库中的配置与脚本"
         uses: actions/checkout@v4
 
-      - name: "步骤 1: 初始化 Ubuntu 24.04 编译环境 (全量对齐 ImmortalWrt 官方依赖包)"
+      - name: "步骤 1：初始化 Ubuntu 24.04 编译环境 (全量适配 Ubuntu 24.04 依赖包)"
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          # 清理 GitHub Actions 自带的冗余软件，腾出磁盘空间
           sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo apt-get update -y
-          # 安装 ImmortalWrt 官方 Quickstart 指定的全套编译依赖
           sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
             bzip2 ccache clang cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib \
-            g++-multilib git gnutls-dev gperf haveged help2man intltool libc6-dev-i386 libelf-dev \
-            libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev \
-            libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano \
+            g++-multilib git gnutls-dev gperf haveged help2man intltool-debian libelf-dev \
+            libglib2.0-dev libgmp-dev libltdl7 libmpc-dev libmpfr-dev libncurses-dev libpython3-dev \
+            libreadline-dev libssl-dev libtool libtool-bin libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano \
             ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils \
             python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo \
             unzip vim wget xmlto xxd zlib1g-dev zstd
