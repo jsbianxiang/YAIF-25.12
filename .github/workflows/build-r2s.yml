@@ -1,4 +1,4 @@
-name: Build ImmortalWrt 25.12 for R2S
+name: Build ImmortalWrt 25.12 for NanoPi R2S
 
 on:
   workflow_dispatch:
@@ -14,81 +14,322 @@ permissions:
 
 jobs:
   build:
-    # 切换回官方推荐的最稳 22.04 环境
+    # ImmortalWrt 官方推荐稳定环境
+    # Ubuntu 22.04 兼容性最佳
     runs-on: ubuntu-22.04
 
     steps:
-      - name: "步骤 0：下载当前 GitHub 仓库中的配置与脚本"
+      # =====================================================
+      # 0. 获取当前 YAIF 仓库
+      # =====================================================
+      - name: "步骤 0：Checkout YAIF 配置仓库"
         uses: actions/checkout@v4
 
-      - name: "步骤 1：初始化 Ubuntu 22.04 编译环境 (100% 对齐 ImmortalWrt 官方依赖)"
+      # =====================================================
+      # 1. 安装编译依赖
+      #
+      # 对齐 ImmortalWrt/OpenWrt 官方编译环境
+      # =====================================================
+      - name: "步骤 1：初始化 Ubuntu 22.04 编译环境"
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+
+          sudo rm -rf \
+            /etc/apt/sources.list.d/* \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc
+
           sudo apt-get update -y
-          sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-            bzip2 ccache clang cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib \
-            g++-multilib git gnutls-dev gperf haveged help2man intltool libc6-dev-i386 libelf-dev \
-            libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev \
-            libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano \
-            ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils \
-            python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo \
-            unzip vim wget xmlto xxd zlib1g-dev zstd
+
+
+          sudo apt-get install -y \
+            ack \
+            antlr3 \
+            asciidoc \
+            autoconf \
+            automake \
+            autopoint \
+            binutils \
+            bison \
+            build-essential \
+            bzip2 \
+            ccache \
+            clang \
+            cmake \
+            cpio \
+            curl \
+            device-tree-compiler \
+            fastjar \
+            flex \
+            gawk \
+            gettext \
+            gcc-multilib \
+            g++-multilib \
+            git \
+            gnutls-dev \
+            gperf \
+            haveged \
+            help2man \
+            intltool \
+            libc6-dev-i386 \
+            libelf-dev \
+            libglib2.0-dev \
+            libgmp3-dev \
+            libltdl-dev \
+            libmpc-dev \
+            libmpfr-dev \
+            libncurses-dev \
+            libpython3-dev \
+            libreadline-dev \
+            libssl-dev \
+            libtool \
+            libyaml-dev \
+            libz-dev \
+            lld \
+            llvm \
+            lrzsz \
+            mkisofs \
+            msmtp \
+            nano \
+            ninja-build \
+            p7zip \
+            p7zip-full \
+            patch \
+            pkgconf \
+            python3 \
+            python3-pip \
+            python3-ply \
+            python3-docutils \
+            python3-pyelftools \
+            qemu-utils \
+            re2c \
+            rsync \
+            scons \
+            squashfs-tools \
+            subversion \
+            swig \
+            texinfo \
+            unzip \
+            vim \
+            wget \
+            xmlto \
+            xxd \
+            zlib1g-dev \
+            zstd
+
           sudo apt-get clean
 
-      - name: "步骤 2：拉取 ImmortalWrt v25.12.1源码"
+      # =====================================================
+      # 2. 拉取 ImmortalWrt 25.12.1 源码
+      # =====================================================
+      - name: "步骤 2：Clone ImmortalWrt v25.12.1"
+
         run: |
-          git clone -b v25.12.1 \
+
+          git clone \
+            -b v25.12.1 \
             --single-branch \
             --filter=blob:none \
-            https://github.com/immortalwrt/immortalwrt immortalwrt
+            https://github.com/immortalwrt/immortalwrt \
+            immortalwrt
 
-      - name: "步骤 3 & 4：运行 Diy-Part1.sh 并更新/安装 Feeds 软件源"
+      # =====================================================
+      # 3. 更新 feeds
+      #
+      # 包括：
+      # - 官方 packages
+      # - luci
+      # - nikki
+      #
+      # Nikki feed 由 Diy-Part1 注入
+      # =====================================================
+      - name: "步骤 3：执行 Diy-Part1 并安装 feeds"
+
         run: |
+
           cd immortalwrt
+
+
           chmod +x ../device/r2s/Diy-Part1.sh
+
+
           ../device/r2s/Diy-Part1.sh
+
+
           ./scripts/feeds update -a
+
+
           ./scripts/feeds install -a
 
-      - name: "步骤 5：运行 Diy-Part2.sh 注入自定义 files 配置文件"
+      # =====================================================
+      # 4. 注入自定义文件
+      #
+      # 包括：
+      # - 默认配置
+      # - 网络配置
+      # - 启动脚本
+      #
+      # 不影响 .config
+      # =====================================================
+      - name: "步骤 4：执行 Diy-Part2 注入 files"
+
         run: |
+
           cd immortalwrt
+
+
           chmod +x ../device/r2s/Diy-Part2.sh
+
+
           ../device/r2s/Diy-Part2.sh
 
-      - name: "步骤 6：应用 R2S 种子配置并生成完整的 .config"
+      # =====================================================
+      # 5. 应用 config.seed
+      #
+      # 这是 YAIF 核心配置入口
+      #
+      # 流程：
+      #
+      # config.seed
+      #      |
+      #      v
+      # make defconfig
+      #      |
+      #      v
+      # .config
+      #
+      # =====================================================
+      - name: "步骤 5：应用 R2S config.seed 并生成 .config"
+
         run: |
+
           cd immortalwrt
-          if [ -f "../device/r2s/config.seed" ]; then
-            cp -rf ../device/r2s/config.seed .config
-          fi
+
+
+          cp ../device/r2s/config.seed .config
+
+
           make defconfig
 
-      # ---------------------------------------------------------
-      # 🔍 核心 SSH 调试环节 (按需勾选触发)
-      # ---------------------------------------------------------
-      - name: "步骤 7：SSH 连接到 Actions 现场调试 (tmate)"
+      # =====================================================
+      # 6. 验证最终 .config
+      #
+      # 检查：
+      # - R2S target
+      # - Nikki
+      # - Mihomo Meta
+      # - Daed
+      # - BTF
+      #
+      # 防止旧配置污染
+      # =====================================================
+      - name: "步骤 6：检查最终配置"
+
+        run: |
+
+          cd immortalwrt
+
+
+          echo "===== TARGET ====="
+
+          grep TARGET .config || true
+
+
+
+          echo "===== PROXY CORE ====="
+
+          grep -Ei \
+            "nikki|mihomo|daed|dae" \
+            .config || true
+
+
+
+          echo "===== KERNEL BTF ====="
+
+          grep -Ei \
+            "BTF|DEBUG_INFO" \
+            .config || true
+
+
+
+          echo "===== OLD CONFIG CHECK ====="
+
+          grep -Ei \
+            "opkg|iptables|r8169|mihomo-alpha" \
+            .config || true
+
+      # =====================================================
+      # 7. 保存最终 .config
+      #
+      # 方便以后排查编译问题
+      # =====================================================
+      - name: "步骤 7：保存最终 .config"
+
+        uses: actions/upload-artifact@v4
+
+        with:
+          name: YAIF-R2S-final-config
+
+          path: immortalwrt/.config
+
+      # =====================================================
+      # 8. SSH 调试入口
+      #
+      # 手动运行 Actions 时开启
+      # =====================================================
+      - name: "步骤 8：SSH 远程调试"
+
         uses: mxschmitt/action-tmate@v3
+
         if: ${{ inputs.ssh == true }}
+
         with:
           limit-access-to-actor: false
 
-      - name: "步骤 8：预下载源码依赖包"
-        run: |
-          cd immortalwrt
-          make defconfig
-          make download -j$(nproc)
+      # =====================================================
+      # 9. 下载编译依赖
+      #
+      # 注意：
+      # 不再重复 make defconfig
+      # =====================================================
+      - name: "步骤 9：预下载源码包"
 
-      - name: "步骤 9：编译 R2S 固件 (make)"
         run: |
-          cd immortalwrt
-          echo "开启 $(nproc) 线程多核加速编译..."
-          make -j$(nproc) || make -j1 V=s
 
-      - name: "步骤 10：整理打包固件并发布到 GitHub Artifacts"
+          cd immortalwrt
+
+
+          make download -j4
+
+      # =====================================================
+      # 10. 编译固件
+      #
+      # 第一次验证使用低并发：
+      # -j2
+      #
+      # 成功后可提升
+      # =====================================================
+      - name: "步骤 10：编译 NanoPi R2S 固件"
+
+        run: |
+
+          cd immortalwrt
+
+
+          make -j2 V=s
+
+      # =====================================================
+      # 11. 上传固件
+      # =====================================================
+      - name: "步骤 11：上传 R2S 固件"
+
         uses: actions/upload-artifact@v4
+
         with:
-          name: ImmortalWrt_NanoPi_R2S
-          path: immortalwrt/bin/targets/rockchip/armv8/*sysupgrade.img.gz
+          name: ImmortalWrt-NanoPi-R2S
+
+          path: |
+
+            immortalwrt/bin/targets/rockchip/armv8/*sysupgrade.img.gz
