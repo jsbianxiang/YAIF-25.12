@@ -345,6 +345,14 @@ jobs:
       #
       # =====================================================
 
+      - name: Check config file
+
+        run: |
+
+          ls -lh immortalwrt/.config
+
+          test -f immortalwrt/.config
+
       - name: Upload final config
 
         uses: actions/upload-artifact@v4
@@ -352,7 +360,9 @@ jobs:
         with:
           name: YAIF-R2S-final-config
 
-          path: immortalwrt/.config
+          path: |
+
+            ${{ github.workspace }}/immortalwrt/.config
 
       # =====================================================
       # 8. SSH 调试
