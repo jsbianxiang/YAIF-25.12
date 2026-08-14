@@ -20,7 +20,7 @@ jobs:
       - name: "步骤 0: 下载当前 GitHub 仓库中的配置与脚本"
         uses: actions/checkout@v4
 
-      - name: "步骤 1：初始化 Ubuntu 24.04 编译环境 (全量适配 Ubuntu 24.04 依赖包)"
+      - name: "步骤 1:初始化 Ubuntu 24.04 编译环境 (全量适配 Ubuntu 24.04 依赖包)"
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
