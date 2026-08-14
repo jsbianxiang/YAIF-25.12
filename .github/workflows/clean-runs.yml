@@ -1,23 +1,30 @@
 name: Clean Old Workflow Runs
 
 on:
-  schedule:
-    # 每月 1 号国际标准时间 00:00 自动运行
-    - cron: "0 0 1 * *"
-  # 支持在 GitHub Actions 页面手动点击触发
   workflow_dispatch:
+    inputs:
+      days:
+        description: "清理多少天之前的历史记录"
+        required: true
+        default: "3"
+      minimum_runs:
+        description: "至少保留的运行记录数量"
+        required: true
+        default: "3"
 
 permissions:
   actions: write
 
 jobs:
-  delete-runs:
-    runs-on: ubuntu-24.04
+  clean-runs:
+    # 同步切回官方推荐的最稳 22.04 环境
+    runs-on: ubuntu-22.04
+
     steps:
-      - name: "清理历史工作流构建记录"
+      - name: "清理旧的 Workflow 运行历史"
         uses: Mattraks/delete-workflow-runs@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ github.token }}
           repository: ${{ github.repository }}
-          retain_days: 14 # 保留近 14 天内的构建记录
-          keep_minimum_runs: 3 # 最少保留最近 3 次记录，避免清空
+          retain_days: ${{ github.event.inputs.days }}
+          keep_minimum_runs: ${{ github.event.inputs.minimum_runs }}
