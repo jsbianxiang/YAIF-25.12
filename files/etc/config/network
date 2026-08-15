@@ -16,7 +16,8 @@ config interface 'loopback'
 # 2. 全局网络参数配置
 # ---------------------------------------------------------
 config globals 'globals'
-
+	option packet_steering '1'
+	option steering_flows '128'
 # ---------------------------------------------------------
 # 3. LAN 局域网桥接设备 (绑定 eth1 USB 网口)
 # ---------------------------------------------------------
@@ -35,6 +36,7 @@ config interface 'lan'
 	option ip6assign '64'
 	option delegate '0'
 	option ip6ifaceid 'eui64'
+	option multipath 'off'
 
 # ---------------------------------------------------------
 # 5. WAN 广域网接口配置 (绑定 eth0 原生网口，接入上级光猫/主路由)
@@ -45,8 +47,8 @@ config interface 'wan'
 	list ipaddr '192.168.1.2/24'
 	option gateway '192.168.1.1'
 	option broadcast '192.168.1.255'
-	list dns '223.5.5.5'
 	list dns '119.29.29.29'
+	option multipath 'off'
 
 # ---------------------------------------------------------
 # 6. WAN6 IPv6 接口配置
@@ -56,3 +58,7 @@ config interface 'wan6'
 	option proto 'dhcpv6'
 	option norelease '1'
 	option peerdns '0'
+	option reqaddress 'try'
+	option reqprefix 'auto'
+	list dns '2402:4e00::'
+	option multipath 'off'

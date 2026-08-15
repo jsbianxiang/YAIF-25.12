@@ -330,6 +330,10 @@ CONFIG_PACKAGE_daed-geosite=y
 CONFIG_KERNEL_DEBUG_INFO=y
 CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y
 
+#
+# SSH SFTP support
+#
+CONFIG_PACKAGE_openssh-sftp-server=y
 
 # =========================================================
 # 15. 清理旧版本配置

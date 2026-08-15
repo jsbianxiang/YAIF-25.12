@@ -11,7 +11,7 @@ echo "==> [Diy-Part1] 开始检查并追加第三方 Feeds 软件源..."
 # ---------------------------------------------------------
 # 检查 feeds.conf.default 中是否包含 nikki 关键字；
 # 若不存在，追加末尾带 ;main 分支指示符的官方拉取地址。
-if ! grep -q "nikki" feeds.conf.default; then
+if ! grep -q "^src-git nikki " feeds.conf.default; then
     echo "==> 追加 Nikki 官方软件源 (main 分支)..."
     echo 'src-git nikki https://github.com/nikkinikki-org/OpenWrt-nikki.git;main' >> feeds.conf.default
 else
