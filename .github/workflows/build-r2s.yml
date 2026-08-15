@@ -50,12 +50,8 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
 
         run: |
-
           sudo apt-get update -y
-
           sudo apt-get full-upgrade -y
-
-
           sudo apt-get install -y \
             ack-grep \
             antlr3 \
@@ -134,39 +130,12 @@ jobs:
             xxd \
             zlib1g-dev \
             zstd
-
-
-
           # Ubuntu22.04兼容
           # ImmortalWrt 构建环境需要 ack
-
           sudo ln -sf \
             /usr/bin/ack-grep \
             /usr/local/bin/ack
-
-
-
           sudo apt-get clean
-
-      - name: Verify build environment
-
-        run: |
-
-          echo "===== Compiler ====="
-
-          gcc --version
-
-
-          echo "===== Python ====="
-
-          python3 --version
-
-
-          echo "===== ACK ====="
-
-          which ack
-
-          ack --version
 
       # =====================================================
       # 2. 拉取 ImmortalWrt
@@ -175,18 +144,11 @@ jobs:
       - name: Clone ImmortalWrt v25.12.1
 
         run: |
-
-
           git clone \
-
             -b v25.12.1 \
-
             --single-branch \
-
             --filter=blob:none \
-
             https://github.com/immortalwrt/immortalwrt \
-
             immortalwrt
 
       # =====================================================
@@ -890,7 +852,7 @@ jobs:
 
 
 
-          make -j$(nproc) V=s
+          make -j2 V=s
 
       # =====================================================
       # 13. 整理固件
