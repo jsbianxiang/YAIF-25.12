@@ -159,19 +159,9 @@ jobs:
 
         run: |
 
-
-          set -e
-
-
-
           cd immortalwrt
 
-
-
           chmod +x ../device/r2s/Diy-Part1.sh
-
-
-
           ../device/r2s/Diy-Part1.sh
 
           ./scripts/feeds update -a
