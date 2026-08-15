@@ -240,8 +240,6 @@ jobs:
 
             --single-branch \
 
-            --depth=1 \
-
             --filter=blob:none \
 
             https://github.com/immortalwrt/immortalwrt \
@@ -294,7 +292,7 @@ jobs:
 
 
 
-          ./scripts/feeds install -a -f
+          ./scripts/feeds install -a
 
       - name: Debug feeds state
 
@@ -906,7 +904,7 @@ jobs:
 
           ls -lh YAIF-feeds-runtime.conf
 
-          ls -lh YAIF-feeds-runtime-dir
+          ls -lh YAIF-feeds-runtime-dir.tar.gz
 
       - name: Upload final config
 
@@ -919,9 +917,8 @@ jobs:
 
           path: |
             YAIF-R2S-final.config
-            YAIF-feeds.conf
             YAIF-feeds-runtime.conf
-            YAIF-feeds-runtime-dir
+            YAIF-feeds-runtime-dir.tar.gz
             device/r2s/config.seed
 
       # =====================================================
