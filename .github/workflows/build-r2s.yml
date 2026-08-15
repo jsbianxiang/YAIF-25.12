@@ -294,11 +294,21 @@ jobs:
       - name: Check forbidden packages
         run: |
           cd immortalwrt
+
+          echo "===== Checking forbidden packages ====="
+
           if grep -q "^CONFIG_PACKAGE_mihomo-alpha=y" .config
           then
               echo "ERROR: mihomo-alpha enabled"
               exit 1
           fi
+
+          if grep -q "^CONFIG_PACKAGE_mihomo-alpha=" .config
+          then
+              echo "WARNING: mihomo-alpha found"
+              grep "mihomo-alpha" .config
+          fi
+
           echo "Forbidden packages clean"
 
       # =====================================================
