@@ -159,10 +159,16 @@ jobs:
 
         run: |
           cd immortalwrt
-          chmod +x \
-            ../device/r2s/Diy-Part1.sh
+          echo "===== DEBUG PATH ====="
+          pwd
+          echo "===== LIST DEVICE ====="
+          ls -la ../device/r2s/
+
+          echo "===== CHMOD TEST ====="
+          chmod +x ../device/r2s/Diy-Part1.sh
 
           ../device/r2s/Diy-Part1.sh
+
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
