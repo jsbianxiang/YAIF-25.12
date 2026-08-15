@@ -169,64 +169,7 @@ jobs:
           ack --version
 
       # =====================================================
-      # 2. ccache
-      # =====================================================
-
-      - name: Restore ccache
-
-        uses: actions/cache@v4
-
-        with:
-          path: |
-
-            ~/.ccache
-
-          key: immortalwrt-25.12.1-r2s-ccache-v2-${{ runner.os }}
-
-          restore-keys: |
-
-            immortalwrt-25.12.1-r2s-ccache-v2
-
-      - name: Setup ccache
-
-        run: |
-
-
-          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
-
-
-
-          ccache --max-size=8G
-
-
-
-          ccache --set-config=compression=true
-
-
-
-          ccache --show-stats
-
-      - name: Enable ccache
-
-        run: |
-
-
-          echo "PATH=/usr/lib/ccache:$PATH" >> $GITHUB_ENV
-
-
-
-          which gcc
-
-
-
-          gcc --version
-
-
-
-          ccache --version
-
-      # =====================================================
-      # 3. 拉取 ImmortalWrt
+      # 2. 拉取 ImmortalWrt
       # =====================================================
 
       - name: Clone ImmortalWrt v25.12.1
@@ -246,23 +189,8 @@ jobs:
 
             immortalwrt
 
-      - name: Cache OpenWrt dl
-
-        uses: actions/cache@v4
-
-        with:
-          path: |
-
-            immortalwrt/dl
-
-          key: immortalwrt-25.12.1-r2s-dl-${{ runner.os }}
-
-          restore-keys: |
-
-            immortalwrt-25.12.1-r2s-dl-
-
       # =====================================================
-      # 4. feeds
+      # 3. feeds
       # =====================================================
 
       - name: Update feeds
@@ -963,17 +891,6 @@ jobs:
 
 
           make -j$(nproc) V=s
-
-      # =====================================================
-      # 12. ccache统计
-      # =====================================================
-
-      - name: Show ccache stats
-
-        run: |
-
-
-          ccache --show-stats
 
       # =====================================================
       # 13. 整理固件
