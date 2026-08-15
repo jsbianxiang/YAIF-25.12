@@ -55,9 +55,9 @@ jobs:
 
           sudo apt-get full-upgrade -y
 
-          sudo apt-get install -y \
 
-            ack \
+          sudo apt-get install -y \
+            ack-grep \
             antlr3 \
             asciidoc \
             autoconf \
@@ -126,14 +126,25 @@ jobs:
             swig \
             texinfo \
             uglifyjs \
-            upx-ucl \
             unzip \
+            upx-ucl \
             vim \
             wget \
             xmlto \
             xxd \
             zlib1g-dev \
             zstd
+
+
+
+          # Ubuntu22.04兼容
+          # ImmortalWrt 构建环境需要 ack
+
+          sudo ln -sf \
+            /usr/bin/ack-grep \
+            /usr/local/bin/ack
+
+
 
           sudo apt-get clean
 
