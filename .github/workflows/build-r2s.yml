@@ -159,11 +159,6 @@ jobs:
 
         run: |
 
-
-          set -e
-
-
-
           cd immortalwrt
 
 
