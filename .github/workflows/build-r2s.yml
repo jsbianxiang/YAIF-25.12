@@ -28,15 +28,16 @@ jobs:
       # =====================================================
 
       - name: Checkout YAIF
+
         uses: actions/checkout@v4
 
       # =====================================================
-      # 1. 编译环境
+      # 1. 安装编译依赖
       #
-      # 对齐 ImmortalWrt 官方要求
+      # 对齐 ImmortalWrt 官方构建环境
       #
       # Ubuntu 22.04
-      # AMD64 runner
+      # AMD64 Runner
       #
       # =====================================================
 
@@ -47,9 +48,8 @@ jobs:
 
         run: |
 
-          sudo apt-get update -y
 
-          sudo apt-get full-upgrade -y
+          sudo apt-get update -y
 
 
           sudo apt-get install -y \
@@ -133,8 +133,9 @@ jobs:
 
 
 
-          # Ubuntu22.04兼容
-          # ImmortalWrt 构建环境需要 ack
+          # Ubuntu 22.04 兼容
+          # ImmortalWrt 构建需要 ack 命令
+
 
           sudo ln -sf \
             /usr/bin/ack-grep \
@@ -145,12 +146,63 @@ jobs:
           sudo apt-get clean
 
       # =====================================================
-      # 2. 拉取 ImmortalWrt 25.12.1源码
+      # 2. 配置 ccache 缓存
       #
-      # 官方 Quickstart:
-      # git clone -b <branch>
-      # --single-branch
-      # --filter=blob:none
+      # 用于加速重复编译
+      #
+      # =====================================================
+
+      - name: Restore ccache
+
+        uses: actions/cache@v4
+
+        with:
+          path: |
+
+            ~/.ccache
+
+          key: immortalwrt-25.12.1-r2s-ccache-v2-${{ runner.os }}
+
+          restore-keys: |
+
+            immortalwrt-25.12.1-r2s-ccache-v2
+
+      - name: Setup ccache
+
+        run: |
+
+
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+
+
+          ccache --max-size=8G
+
+
+          ccache --set-config=compression=true
+
+
+          ccache --show-stats
+
+      - name: Enable ccache
+
+        run: |
+
+
+          echo "PATH=/usr/lib/ccache:$PATH" >> $GITHUB_ENV
+
+
+          which gcc
+
+
+          gcc --version
+
+
+          ccache --version
+
+      # =====================================================
+      # 3. 拉取 ImmortalWrt 25.12.1源码
+      #
+      # 使用浅克隆减少下载时间
       #
       # =====================================================
 
@@ -158,21 +210,37 @@ jobs:
 
         run: |
 
+
           git clone \
             -b v25.12.1 \
             --single-branch \
+            --depth=1 \
             --filter=blob:none \
             https://github.com/immortalwrt/immortalwrt \
             immortalwrt
 
+      - name: Cache OpenWrt dl
+
+        uses: actions/cache@v4
+
+        with:
+          path: |
+
+            immortalwrt/dl
+
+          key: immortalwrt-25.12.1-r2s-dl-${{ runner.os }}
+
+          restore-keys: |
+
+            immortalwrt-25.12.1-r2s-dl-
+
       # =====================================================
-      # 3. 更新 feeds
+      # 4. 更新 feeds
       #
       # Diy-Part1:
       #
-      # 负责:
       # - 添加 Nikki feed
-      # - 其它自定义源
+      # - 添加其它自定义源
       #
       # =====================================================
 
@@ -181,11 +249,16 @@ jobs:
         run: |
 
 
+          set -e
+
+
           cd immortalwrt
+
 
 
           chmod +x \
             ../device/r2s/Diy-Part1.sh
+
 
 
           ../device/r2s/Diy-Part1.sh
@@ -196,15 +269,16 @@ jobs:
 
 
 
-          ./scripts/feeds install -a
+          ./scripts/feeds install -a -f
 
       # =====================================================
-      # 4. 注入 files
+      # 5. 注入 files 文件
       #
-      # 例如:
-      # /etc/config
-      # /etc/init.d
-      # 默认网络配置
+      # 用于添加:
+      #
+      # - /etc/config
+      # - /etc/init.d
+      # - 默认系统配置
       #
       # 不修改 .config
       #
@@ -218,16 +292,18 @@ jobs:
           cd immortalwrt
 
 
+
           chmod +x \
             ../device/r2s/Diy-Part2.sh
+
 
 
           ../device/r2s/Diy-Part2.sh
 
       # =====================================================
-      # 5. 应用 config.seed
+      # 6. 应用 R2S 配置种子
       #
-      # 唯一配置入口
+      # 唯一配置入口:
       #
       # config.seed
       #       |
@@ -247,6 +323,7 @@ jobs:
           cd immortalwrt
 
 
+
           cp \
             ../device/r2s/config.seed \
             .config
@@ -256,16 +333,16 @@ jobs:
           make defconfig
 
       # =====================================================
-      # 6. 检查最终 .config
+      # 7. 验证最终配置
       #
-      # 重点:
+      # 检查:
       #
-      # R2S
-      # Nikki
-      # Mihomo Meta
-      # Alpha关闭
-      # BTF
-      # APK时代
+      # - NanoPi R2S目标
+      # - Nikki + Mihomo Meta
+      # - Daed代理
+      # - Kernel BTF
+      # - APK包管理器
+      # - MUSL工具链
       #
       # =====================================================
 
@@ -280,22 +357,22 @@ jobs:
 
           echo "===== TARGET ====="
 
-          grep \
-            "TARGET_" \
-            .config \
-            | grep -E \
-            "rockchip|nanopi-r2s"
+
+
+          grep -E \
+            "CONFIG_TARGET_(rockchip|.*nanopi-r2s)" \
+            .config || true
+
 
 
 
           echo "===== PARTITION ====="
 
 
-          grep \
-            -E \
+
+          grep -E \
             "TARGET_(KERNEL|ROOTFS)_PARTSIZE" \
-            .config \
-            || true
+            .config || true
 
 
 
@@ -303,11 +380,10 @@ jobs:
           echo "===== NIKKI / MIHOMO ====="
 
 
-          grep \
-            -E \
+
+          grep -E \
             "nikki|mihomo" \
-            .config \
-            || true
+            .config || true
 
 
 
@@ -315,11 +391,10 @@ jobs:
           echo "===== DAED ====="
 
 
-          grep \
-            -E \
+
+          grep -E \
             "daed|DAED" \
-            .config \
-            || true
+            .config || true
 
 
 
@@ -327,27 +402,41 @@ jobs:
           echo "===== BTF ====="
 
 
-          grep \
-            -E \
+
+          grep -E \
             "DEBUG_INFO|BTF" \
-            .config \
-            || true
+            .config || true
 
 
 
 
-          echo "===== APK CHECK ====="
+          echo "===== PACKAGE MANAGER (APK/OPKG) ====="
 
 
-          grep \
-            "opkg" \
-            .config \
-            || true
+
+          grep -E \
+            "CONFIG_PACKAGE_(apk|opkg)" \
+            .config || true
+
+
+
+
+          echo "===== TOOLCHAIN ====="
+
+
+
+          grep -E \
+            "CONFIG_USE_MUSL|CONFIG_LIBC_USE_MUSL" \
+            .config || true
 
       # =====================================================
-      # 7. 保存最终配置
+      # 8. 保存最终配置
       #
-      # 方便以后复现
+      # 用于:
+      #
+      # - 后续复现
+      # - 问题排查
+      # - 版本比较
       #
       # =====================================================
 
@@ -355,9 +444,22 @@ jobs:
 
         run: |
 
+
           ls -lh immortalwrt/.config
 
+
+
           test -f immortalwrt/.config
+
+
+
+          cp \
+            immortalwrt/.config \
+            YAIF-R2S-final.config
+
+
+
+          ls -lh YAIF-R2S-final.config
 
       - name: Upload final config
 
@@ -368,14 +470,14 @@ jobs:
 
           retention-days: 90
 
-          path: |
-
-            ${{ github.workspace }}/immortalwrt/.config
+          path: YAIF-R2S-final.config
 
       # =====================================================
-      # 8. SSH 调试
+      # 9. SSH 调试
       #
       # 手动开启
+      #
+      # 用于 Actions 环境排查
       #
       # =====================================================
 
@@ -389,9 +491,11 @@ jobs:
           limit-access-to-actor: false
 
       # =====================================================
-      # 9. 下载源码包
+      # 10. 下载源码包
       #
-      # 不重复 make defconfig
+      # 提前下载所有依赖源码
+      #
+      # 不重新执行 defconfig
       #
       # =====================================================
 
@@ -403,13 +507,16 @@ jobs:
           cd immortalwrt
 
 
+
           make download -j$(nproc)
 
       # =====================================================
-      # 10. 编译
+      # 11. 编译固件
       #
-      # 第一次:
-      # -j2 保守验证
+      # 使用全部 CPU 核心
+      #
+      # V=s:
+      # 输出详细编译日志
       #
       # =====================================================
 
@@ -421,12 +528,33 @@ jobs:
           cd immortalwrt
 
 
-          make -j2 V=s
+
+          make -j$(nproc) V=s
 
       # =====================================================
-      # 11. 准备发布文件
+      # 12. 显示 ccache 状态
       #
-      # 不影响原编译输出
+      # 用于观察缓存命中情况
+      #
+      # =====================================================
+
+      - name: Show ccache stats
+
+        run: |
+
+
+          ccache --show-stats
+
+      # =====================================================
+      # 13. 整理固件文件
+      #
+      # 输出:
+      #
+      # - sysupgrade 镜像
+      # - sha256校验
+      # - build信息
+      # - manifest
+      # - 最终配置
       #
       # =====================================================
 
@@ -438,31 +566,53 @@ jobs:
           mkdir -p release
 
 
-          cp \
-          immortalwrt/bin/targets/rockchip/armv8/*sysupgrade.img.gz \
-          release/
 
 
           cp \
-          immortalwrt/bin/targets/rockchip/armv8/sha256sums \
-          release/ || true
+            immortalwrt/bin/targets/rockchip/armv8/*sysupgrade.img.gz \
+            release/ || true
+
+
 
 
           cp \
-          immortalwrt/bin/targets/rockchip/armv8/config.buildinfo \
-          release/ || true
+            immortalwrt/bin/targets/rockchip/armv8/sha256sums \
+            release/ || true
+
+
 
 
           cp \
-          immortalwrt/bin/targets/rockchip/armv8/*.manifest \
-          release/ || true
+            immortalwrt/bin/targets/rockchip/armv8/config.buildinfo \
+            release/ || true
+
+
 
 
           cp \
-          immortalwrt/.config \
-          release/YAIF-R2S.config
+            immortalwrt/bin/targets/rockchip/armv8/*.manifest \
+            release/ || true
+
+
+
+
+          cp \
+            immortalwrt/.config \
+            release/YAIF-R2S.config
+
+
+
 
           ls -lh release
+
+      # =====================================================
+      # 14. 上传编译产物
+      #
+      # Actions Artifact:
+      #
+      # 保留90天
+      #
+      # =====================================================
 
       - name: Upload firmware
 
@@ -478,9 +628,9 @@ jobs:
             release/
 
       # =====================================================
-      # 12. GitHub Release
+      # 15. 创建 GitHub Release
       #
-      # 手动选择 release=true 才执行
+      # 仅 release=true 时执行
       #
       # =====================================================
 
@@ -497,9 +647,12 @@ jobs:
 
           body: |
 
+
             YAIF-25.12.1 NanoPi R2S
 
+
             ImmortalWrt 25.12.1
+
 
 
             Target:
@@ -507,9 +660,11 @@ jobs:
             rockchip armv8
 
 
+
             Device:
 
             FriendlyARM NanoPi R2S
+
 
 
             Kernel:
@@ -517,19 +672,22 @@ jobs:
             Linux 6.12
 
 
+
             Build:
 
             ${{ github.sha }}
 
 
+
             Artifact:
 
-            sysupgrade.img.gz
 
-            sha256sums
+            - sysupgrade.img.gz
 
-            config.buildinfo
+            - sha256sums
 
-            manifest
+            - config.buildinfo
 
-            YAIF-R2S.config
+            - manifest
+
+            - YAIF-R2S.config
