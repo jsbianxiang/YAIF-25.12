@@ -185,7 +185,7 @@ jobs:
           echo "===== nikki feed ====="
 
           test -d feeds/nikki \
-          || { echo "ERROR: nikki feed missing"; exit 1; }
+            || { echo "ERROR: nikki feed missing"; exit 1; }
 
       - name: Save feeds state
 
