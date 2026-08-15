@@ -1,24 +1,18 @@
-name: Build ImmortalWrt 25.12 for NanoPi R2S
+name: Build ImmortalWrt 25.12.1 for NanoPi R2S
 
 on:
   workflow_dispatch:
     inputs:
       ssh:
         description: "开启 SSH 调试"
-
         required: false
-
         type: boolean
-
         default: false
 
       release:
         description: "发布 GitHub Release"
-
         required: false
-
         type: boolean
-
         default: false
 
 permissions:
@@ -30,32 +24,20 @@ jobs:
 
     steps:
       # =====================================================
-      # 0. Checkout YAIF
+      # 0. 获取 YAIF 仓库
       # =====================================================
 
       - name: Checkout YAIF
-
         uses: actions/checkout@v4
 
       # =====================================================
-      # 1. 释放空间
-      # =====================================================
-
-      - name: Free disk space
-
-        run: |
-
-          sudo rm -rf /usr/local/lib/android
-
-          sudo rm -rf /usr/share/dotnet
-
-          sudo docker image prune --all --force || true
-
-
-          df -h
-
-      # =====================================================
-      # 2. 安装编译环境
+      # 1. 编译环境
+      #
+      # 对齐 ImmortalWrt 官方要求
+      #
+      # Ubuntu 22.04
+      # AMD64 runner
+      #
       # =====================================================
 
       - name: Install build dependencies
@@ -65,161 +47,133 @@ jobs:
 
         run: |
 
-
           sudo apt-get update -y
+
+          sudo apt-get full-upgrade -y
 
 
           sudo apt-get install -y \
-
             ack-grep \
-
             antlr3 \
-
             asciidoc \
-
             autoconf \
-
             automake \
-
             autopoint \
-
             binutils \
-
             bison \
-
             build-essential \
-
             bzip2 \
-
             ccache \
-
             clang \
-
             cmake \
-
             cpio \
-
             curl \
-
             device-tree-compiler \
-
+            ecj \
+            fastjar \
             flex \
-
             gawk \
-
             gettext \
-
             gcc-multilib \
-
             g++-multilib \
-
             git \
-
+            gnutls-dev \
             gperf \
-
+            haveged \
             help2man \
-
             intltool \
-
             lib32gcc-s1 \
-
             libc6-dev-i386 \
-
             libelf-dev \
-
             libglib2.0-dev \
-
+            libgmp3-dev \
+            libltdl-dev \
+            libmpc-dev \
+            libmpfr-dev \
             libncurses-dev \
-
             libpython3-dev \
-
+            libreadline-dev \
             libssl-dev \
-
             libtool \
-
-            llvm \
-
+            libyaml-dev \
+            libz-dev \
             lld \
-
+            llvm \
+            lrzsz \
+            mkisofs \
+            msmtp \
+            nano \
             ninja-build \
-
+            p7zip \
+            p7zip-full \
             patch \
-
             pkgconf \
-
             python3 \
-
             python3-pip \
-
             python3-ply \
-
+            python3-docutils \
             python3-pyelftools \
-
+            qemu-utils \
+            re2c \
             rsync \
-
+            scons \
             squashfs-tools \
-
+            subversion \
+            swig \
+            texinfo \
+            uglifyjs \
             unzip \
-
+            upx-ucl \
+            vim \
             wget \
-
+            xmlto \
+            xxd \
             zlib1g-dev \
-
             zstd
 
 
 
+          # Ubuntu22.04兼容
+          # ImmortalWrt 构建环境需要 ack
+
           sudo ln -sf \
-
             /usr/bin/ack-grep \
-
             /usr/local/bin/ack
 
-      # =====================================================
-      # 3. 缓存
-      # =====================================================
-
-      - name: Cache ImmortalWrt build
-
-        uses: actions/cache@v4
-
-        with:
-          path: |
 
 
-            immortalwrt/dl
-
-            immortalwrt/staging_dir
-
-            immortalwrt/build_dir
-
-          key: immortalwrt-r2s-${{ runner.os }}-${{ hashFiles('device/r2s/config.seed') }}
-
-          restore-keys: immortalwrt-r2s-${{ runner.os }}-
+          sudo apt-get clean
 
       # =====================================================
-      # 4. Clone ImmortalWrt
+      # 2. 拉取 ImmortalWrt 25.12.1源码
+      #
+      # 官方 Quickstart:
+      # git clone -b <branch>
+      # --single-branch
+      # --filter=blob:none
+      #
       # =====================================================
 
       - name: Clone ImmortalWrt v25.12.1
 
         run: |
 
-
           git clone \
-
             -b v25.12.1 \
-
             --single-branch \
-
             --filter=blob:none \
-
             https://github.com/immortalwrt/immortalwrt \
-
             immortalwrt
 
       # =====================================================
-      # 5. feeds
+      # 3. 更新 feeds
+      #
+      # Diy-Part1:
+      #
+      # 负责:
+      # - 添加 Nikki feed
+      # - 其它自定义源
+      #
       # =====================================================
 
       - name: Update feeds
@@ -230,19 +184,30 @@ jobs:
           cd immortalwrt
 
 
-          chmod +x ../device/r2s/Diy-Part1.sh
+          chmod +x \
+            ../device/r2s/Diy-Part1.sh
 
 
           ../device/r2s/Diy-Part1.sh
 
 
+
           ./scripts/feeds update -a
+
 
 
           ./scripts/feeds install -a
 
       # =====================================================
-      # 6. files注入
+      # 4. 注入 files
+      #
+      # 例如:
+      # /etc/config
+      # /etc/init.d
+      # 默认网络配置
+      #
+      # 不修改 .config
+      #
       # =====================================================
 
       - name: Inject files
@@ -253,13 +218,25 @@ jobs:
           cd immortalwrt
 
 
-          chmod +x ../device/r2s/Diy-Part2.sh
+          chmod +x \
+            ../device/r2s/Diy-Part2.sh
 
 
           ../device/r2s/Diy-Part2.sh
 
       # =====================================================
-      # 7. config.seed
+      # 5. 应用 config.seed
+      #
+      # 唯一配置入口
+      #
+      # config.seed
+      #       |
+      #       v
+      # make defconfig
+      #       |
+      #       v
+      # .config
+      #
       # =====================================================
 
       - name: Apply R2S config.seed
@@ -270,16 +247,29 @@ jobs:
           cd immortalwrt
 
 
-          cp ../device/r2s/config.seed .config
+          cp \
+            ../device/r2s/config.seed \
+            .config
+
 
 
           make defconfig
 
       # =====================================================
-      # 8. 配置检查
+      # 6. 检查最终 .config
+      #
+      # 重点:
+      #
+      # R2S
+      # Nikki
+      # Mihomo Meta
+      # Alpha关闭
+      # BTF
+      # APK时代
+      #
       # =====================================================
 
-      - name: Verify configuration
+      - name: Verify final configuration
 
         run: |
 
@@ -287,35 +277,87 @@ jobs:
           cd immortalwrt
 
 
+
           echo "===== TARGET ====="
 
-
-          grep TARGET_ .config | grep -E "rockchip|nanopi-r2s"
-
-
-
-          echo "===== DAED ====="
-
-
-          grep -E "daed|DAED" .config || true
+          grep \
+            "TARGET_" \
+            .config \
+            | grep -E \
+            "rockchip|nanopi-r2s"
 
 
 
-          echo "===== BTF ====="
+          echo "===== PARTITION ====="
 
 
-          grep -E "DEBUG_INFO|BTF" .config || true
+          grep \
+            -E \
+            "TARGET_(KERNEL|ROOTFS)_PARTSIZE" \
+            .config \
+            || true
+
 
 
 
           echo "===== NIKKI / MIHOMO ====="
 
 
-          grep -E "nikki|mihomo" .config || true
+          grep \
+            -E \
+            "nikki|mihomo" \
+            .config \
+            || true
+
+
+
+
+          echo "===== DAED ====="
+
+
+          grep \
+            -E \
+            "daed|DAED" \
+            .config \
+            || true
+
+
+
+
+          echo "===== BTF ====="
+
+
+          grep \
+            -E \
+            "DEBUG_INFO|BTF" \
+            .config \
+            || true
+
+
+
+
+          echo "===== APK CHECK ====="
+
+
+          grep \
+            "opkg" \
+            .config \
+            || true
 
       # =====================================================
-      # 9. 保存配置
+      # 7. 保存最终配置
+      #
+      # 方便以后复现
+      #
       # =====================================================
+
+      - name: Check config file
+
+        run: |
+
+          ls -lh immortalwrt/.config
+
+          test -f immortalwrt/.config
 
       - name: Upload final config
 
@@ -328,13 +370,13 @@ jobs:
 
           path: |
 
-
-            immortalwrt/.config
-
-            immortalwrt/feeds.conf.default
+            ${{ github.workspace }}/immortalwrt/.config
 
       # =====================================================
-      # 10. SSH调试
+      # 8. SSH 调试
+      #
+      # 手动开启
+      #
       # =====================================================
 
       - name: SSH debug
@@ -347,7 +389,10 @@ jobs:
           limit-access-to-actor: false
 
       # =====================================================
-      # 11. 下载源码
+      # 9. 下载源码包
+      #
+      # 不重复 make defconfig
+      #
       # =====================================================
 
       - name: Download sources
@@ -361,7 +406,11 @@ jobs:
           make download -j$(nproc)
 
       # =====================================================
-      # 12. 编译
+      # 10. 编译
+      #
+      # 第一次:
+      # -j2 保守验证
+      #
       # =====================================================
 
       - name: Build firmware
@@ -375,10 +424,13 @@ jobs:
           make -j2 V=s
 
       # =====================================================
-      # 13. 整理发布文件
+      # 11. 准备发布文件
+      #
+      # 不影响原编译输出
+      #
       # =====================================================
 
-      - name: Prepare release files
+      - name: Prepare firmware files
 
         run: |
 
@@ -386,42 +438,50 @@ jobs:
           mkdir -p release
 
 
-
-          cp immortalwrt/bin/targets/rockchip/armv8/*.img.gz release/
-
-
-
-          cp immortalwrt/bin/targets/rockchip/armv8/sha256sums release/ || true
+          cp \
+          immortalwrt/bin/targets/rockchip/armv8/*sysupgrade.img.gz \
+          release/
 
 
-
-          cp immortalwrt/bin/targets/rockchip/armv8/config.buildinfo release/ || true
-
-
-
-          cp immortalwrt/bin/targets/rockchip/armv8/*.manifest release/ || true
+          cp \
+          immortalwrt/bin/targets/rockchip/armv8/sha256sums \
+          release/ || true
 
 
+          cp \
+          immortalwrt/bin/targets/rockchip/armv8/config.buildinfo \
+          release/ || true
+
+
+          cp \
+          immortalwrt/bin/targets/rockchip/armv8/*.manifest \
+          release/ || true
+
+
+          cp \
+          immortalwrt/.config \
+          release/YAIF-R2S.config
 
           ls -lh release
 
-      # =====================================================
-      # 14. Artifact
-      # =====================================================
-
-      - name: Upload firmware artifact
+      - name: Upload firmware
 
         uses: actions/upload-artifact@v4
 
         with:
-          name: ImmortalWrt-NanoPi-R2S
+          name: YAIF-25.12.1-R2S-${{ github.run_number }}
 
           retention-days: 90
 
-          path: release/
+          path: |
+
+            release/
 
       # =====================================================
-      # 15. GitHub Release
+      # 12. GitHub Release
+      #
+      # 手动选择 release=true 才执行
+      #
       # =====================================================
 
       - name: Create GitHub Release
@@ -431,19 +491,15 @@ jobs:
         uses: softprops/action-gh-release@v2
 
         with:
-          tag_name: YAIF-25.12-R2S-${{ github.run_number }}
+          tag_name: YAIF-25.12.1-R2S-build-${{ github.run_id }}
 
-          name: YAIF-25.12 NanoPi R2S Build ${{ github.run_number }}
+          name: YAIF-25.12.1 NanoPi R2S Build ${{ github.run_number }}
 
           body: |
 
+            YAIF-25.12.1 NanoPi R2S
 
-            # YAIF-25.12 NanoPi R2S
-
-
-            ImmortalWrt:
-
-            25.12.1
+            ImmortalWrt 25.12.1
 
 
             Target:
@@ -461,24 +517,19 @@ jobs:
             Linux 6.12
 
 
-            Features:
-
-
-            - APK package system
-
-            - DAED kernel BTF
-
-            - Nikki/Mihomo support
-
-            - IPv6 support
-
-
-
-            Commit:
+            Build:
 
             ${{ github.sha }}
 
-          files: |
 
+            Artifact:
 
-            release/*
+            sysupgrade.img.gz
+
+            sha256sums
+
+            config.buildinfo
+
+            manifest
+
+            YAIF-R2S.config
