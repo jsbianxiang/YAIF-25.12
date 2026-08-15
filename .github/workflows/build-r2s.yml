@@ -168,21 +168,15 @@ jobs:
 
 
 
-          chmod +x \
-
-            ../device/r2s/Diy-Part1.sh
+          chmod +x ../device/r2s/Diy-Part1.sh
 
 
 
-            ../device/r2s/Diy-Part1.sh
+          ../device/r2s/Diy-Part1.sh
 
+          ./scripts/feeds update -a
 
-
-            ./scripts/feeds update -a
-
-
-
-            ./scripts/feeds install -a
+          ./scripts/feeds install -a
 
       - name: Debug feeds state
 
