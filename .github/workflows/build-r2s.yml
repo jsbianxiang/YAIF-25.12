@@ -5,20 +5,14 @@ on:
     inputs:
       ssh:
         description: "开启 SSH 调试"
-
         required: false
-
         type: boolean
-
         default: false
 
       release:
         description: "发布 GitHub Release"
-
         required: false
-
         type: boolean
-
         default: false
 
 permissions:
@@ -34,7 +28,6 @@ jobs:
       # =====================================================
 
       - name: Checkout YAIF
-
         uses: actions/checkout@v4
 
       # =====================================================
@@ -161,6 +154,7 @@ jobs:
           cd immortalwrt
           echo "===== DEBUG PATH ====="
           pwd
+
           echo "===== LIST DEVICE ====="
           ls -la ../device/r2s/
 
@@ -168,44 +162,27 @@ jobs:
           chmod +x ../device/r2s/Diy-Part1.sh
 
           ../device/r2s/Diy-Part1.sh
-
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
       - name: Debug feeds state
-
         run: |
-
           cd immortalwrt
-
           echo "===== feeds.conf ====="
-
           cat feeds.conf.default
 
-
           echo "===== repositories before build ====="
-
           find . -name "*distfeeds*" -o -name "*repositories*"
 
-
           echo "===== nikki feed ====="
-
           test -d feeds/nikki \
             || { echo "ERROR: nikki feed missing"; exit 1; }
 
       - name: Save feeds state
-
         run: |
-
           cd immortalwrt
-
-
           echo "===== Save feeds configuration ====="
-
-
           cp feeds.conf.default ../YAIF-feeds.conf
-
-
           ls -lh ../YAIF-feeds.conf
 
       # =====================================================
@@ -220,43 +197,24 @@ jobs:
           ../device/r2s/Diy-Part2.sh
 
       - name: Verify injected files
-
         run: |
-
           cd immortalwrt
 
-
           echo "===== Injected APK files ====="
-
-
           find files/etc/apk -type f 2>/dev/null || true
 
-
           echo "===== APK repository content ====="
-
-
           if [ -d files/etc/apk/repositories.d ]; then
-
               for f in files/etc/apk/repositories.d/*
-
               do
-
                   [ -f "$f" ] || continue
-
                   echo "----------"
-
                   echo $f
-
                   cat $f
-
               done
-
           else
-
               echo "ERROR: files/etc/apk/repositories.d missing"
-
               exit 1
-
           fi
 
       # =====================================================
@@ -277,20 +235,8 @@ jobs:
       - name: Apply R2S config.seed
 
         run: |
-
-
           cd immortalwrt
-
-
-
-          cp \
-
-            ../device/r2s/config.seed \
-
-            .config
-
-
-
+          cp ../device/r2s/config.seed .config
           make defconfig
 
       # =====================================================
@@ -299,16 +245,9 @@ jobs:
       - name: Trace APK repository generation
 
         run: |
-
           cd immortalwrt
-
-
           echo "===== Search distfeeds generators ====="
-
-
-          grep -R "distfeeds" \
-          . \
-          2>/dev/null || true
+          grep -R "distfeeds" . 2>/dev/null || true
 
       # =====================================================
       # 6.2 APK runtime 检查
@@ -329,50 +268,22 @@ jobs:
       # =====================================================
 
       - name: Check APK runtime state
-
         run: |
-
           cd immortalwrt
-
-
           echo "===== APK CONFIG ====="
-
-
           grep CONFIG_USE_APK .config || true
 
-
-
           echo "===== APK directories ====="
-
-
-          find . \
-            -maxdepth 5 \
-            -path "*apk*" \
-            2>/dev/null | head -50
-
-
+          find . -maxdepth 5 -path "*apk*" 2>/dev/null | head -50
 
           echo "===== repositories template ====="
-
-
           find . \( -name "repositories*" -o -name "*distfeeds*" \) 2>/dev/null
 
-
-
           echo "===== package manager files ====="
-
-
-          ls -la package/base-files/files/etc/apk \
-            2>/dev/null || true
-
-
+          ls -la package/base-files/files/etc/apk 2>/dev/null || true
 
           echo "===== target apk scripts ====="
-
-
-          grep -R "repositories.d" \
-          . \
-          2>/dev/null || true
+          grep -R "repositories.d" . 2>/dev/null || true
 
       # =====================================================
       # 7. 验证最终配置
@@ -382,156 +293,69 @@ jobs:
       # =====================================================
 
       - name: Verify final configuration
-
         run: |
-
-
           cd immortalwrt
-
-
-
           echo "===== TARGET ====="
-
-
           grep -E \
-
             "CONFIG_TARGET_(rockchip|.*nanopi-r2s)" \
-
             .config || true
-
-
-
 
           echo "===== PARTITION ====="
-
-
           grep -E \
-
             "CONFIG_TARGET_(KERNEL|ROOTFS)_PARTSIZE" \
-
             .config || true
-
-
-
 
           echo "===== PACKAGE MANAGER ====="
-
-
           grep -E \
-
             "CONFIG_(USE_APK|USE_OPKG)" \
-
             .config || true
-
-
-
 
           echo "===== NIKKI / MIHOMO ====="
-
-
           grep -E \
-
             "CONFIG_PACKAGE_(nikki|mihomo)" \
-
             .config || true
-
-
-
 
           echo "===== DAED ====="
-
-
           grep -E \
-
             "CONFIG_PACKAGE_(daed|luci-app-daed)|CONFIG_DAED" \
-
             .config || true
-
-
-
 
           echo "===== BTF / DEBUG ====="
-
-
           grep -E \
-
             "CONFIG_(IKCONFIG|IKCONFIG_PROC|KERNEL_DEBUG_INFO|DEBUG_INFO|BTF|DAED_USE_KERNEL_BTF)" \
-
             .config || true
-
-
-
 
           echo "===== DEBUG REDUCED ====="
-
-
           grep \
-
             "CONFIG_KERNEL_DEBUG_INFO_REDUCED" \
-
             .config || true
-
-
-
 
           echo "===== TPROXY / TUN ====="
-
-
           grep -E \
-
             "CONFIG_PACKAGE_kmod-(tun|nft-tproxy|nft-socket|nft-fullcone|nf-conntrack)" \
-
             .config || true
-
-
-
 
           echo "===== IPV6 ====="
-
-
           grep -E \
-
             "CONFIG_PACKAGE_(ipv6helper|odhcp6c|odhcpd)" \
-
             .config || true
-
-
-
 
           echo "===== STORAGE ====="
-
-
           grep -E \
-
             "CONFIG_PACKAGE_(kmod-usb|block-mount|kmod-fs)" \
-
             .config || true
-
-
-
 
           echo "===== SSH / SFTP ====="
-
-
           grep -E \
-
             "CONFIG_PACKAGE_(dropbear|openssh-sftp-server)" \
-
             .config || true
 
-
-
-
           echo "===== Checking dae kernel features ====="
-
-
           grep -q "^CONFIG_KERNEL_CGROUPS=y" .config \
           || { echo "ERROR: CGROUPS missing"; exit 1; }
 
-
           grep -q "^CONFIG_KERNEL_NET_CLS_BPF=y" .config \
           || { echo "ERROR: NET_CLS_BPF missing"; exit 1; }
-
 
           grep -q "^CONFIG_KERNEL_NET_SCH_INGRESS=y" .config \
           || { echo "ERROR: INGRESS missing"; exit 1; }
@@ -544,170 +368,77 @@ jobs:
       # =====================================================
 
       - name: Check critical configuration
-
         run: |
-
-
           cd immortalwrt
-
-
-
           echo "===== Checking APK ====="
-
-
-
           grep -q "^CONFIG_USE_APK=y" .config \
-
           || { echo "ERROR: APK disabled"; exit 1; }
 
-
-
-
           echo "===== Checking eBPF ====="
-
-
           grep -q "^CONFIG_KERNEL_BPF=y" .config \
           || { echo "ERROR: BPF missing"; exit 1; }
-
 
           grep -q "^CONFIG_KERNEL_BPF_SYSCALL=y" .config \
           || { echo "ERROR: BPF SYSCALL missing"; exit 1; }
 
-
           grep -q "^CONFIG_KERNEL_BPF_JIT=y" .config \
           || { echo "ERROR: BPF JIT missing"; exit 1; }
 
-
-
           grep -q "^CONFIG_KERNEL_DEBUG_INFO=y" .config \
-
           || { echo "ERROR: DEBUG INFO missing"; exit 1; }
 
-
-
-
           grep -q "^CONFIG_KERNEL_DEBUG_INFO_BTF=y" .config \
-
           || { echo "ERROR: Kernel BTF missing"; exit 1; }
 
-
-
-
           grep -q "^CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y" .config \
-
           || { echo "ERROR: Module BTF missing"; exit 1; }
 
-
-
-
           grep -q "^CONFIG_DAED_USE_KERNEL_BTF=y" .config \
-
           || { echo "ERROR: Daed Kernel BTF disabled"; exit 1; }
 
-
-
-
           echo "===== Checking IKCONFIG ====="
-
-
-
           grep -q "^CONFIG_IKCONFIG=y" .config \
-
           || { echo "ERROR: IKCONFIG missing"; exit 1; }
 
-
-
-
           grep -q "^CONFIG_IKCONFIG_PROC=y" .config \
-
           || { echo "ERROR: IKCONFIG_PROC missing"; exit 1; }
 
-
-
-
-
           echo "===== Checking DEBUG trimming ====="
-
-
-
           if grep -q "^CONFIG_KERNEL_DEBUG_INFO_REDUCED=y" .config
-
           then
-
               echo "ERROR: DEBUG_INFO_REDUCED enabled"
-
               exit 1
-
           fi
-
-
-
 
           if grep -q "^CONFIG_KERNEL_DEBUG_INFO_SPLIT=y" .config
-
           then
-
               echo "ERROR: DEBUG_INFO_SPLIT enabled"
-
               exit 1
-
           fi
 
-
-
-
-
           echo "===== Checking Nikki ====="
-
-
-
           grep -q "^CONFIG_PACKAGE_nikki=y" .config \
-
           || { echo "ERROR: Nikki missing"; exit 1; }
 
-
-
-
           grep -q "^CONFIG_PACKAGE_mihomo-meta=y" .config \
-
           || { echo "ERROR: mihomo-meta missing"; exit 1; }
 
-
-
-
           echo "===== Checking NFT TPROXY ====="
-
           grep -q "^CONFIG_PACKAGE_kmod-nft-tproxy=y" .config \
           || { echo "ERROR: nft tproxy missing"; exit 1; }
-
 
           grep -q "^CONFIG_PACKAGE_kmod-tun=y" .config \
           || { echo "ERROR: tun missing"; exit 1; }
 
-
-
-
           echo "===== Checking Daed ====="
-
-
-
           grep -q "^CONFIG_PACKAGE_daed=y" .config \
-
           || { echo "ERROR: Daed missing"; exit 1; }
 
-
-
-
           echo "===== Checking R2S target ====="
-
-
           grep -q \
           "CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r2s=y" \
           .config \
           || { echo "ERROR: R2S target missing"; exit 1; }
-
-
-
 
           echo "ALL CRITICAL CONFIGURATION OK"
 
@@ -717,72 +448,35 @@ jobs:
       # 防止配置漂移
       #
       # =====================================================
-
       - name: Check forbidden packages
-
         run: |
-
-
           cd immortalwrt
-
-
-
-
-
           if grep -q "^CONFIG_PACKAGE_mihomo-alpha=y" .config
-
           then
-
               echo "ERROR: mihomo-alpha enabled"
-
               exit 1
-
           fi
-
-
-
-
           echo "Forbidden packages clean"
 
       # =====================================================
       # 8. 保存最终配置
       # =====================================================
-
       - name: Save final config
-
         run: |
-
-
           ls -lh immortalwrt/.config
-
-
-
           test -f immortalwrt/.config
-
-
-
-
           cp immortalwrt/.config YAIF-R2S-final.config
-
           cp immortalwrt/feeds.conf.default YAIF-feeds-runtime.conf
-
           tar czf YAIF-feeds-runtime-dir.tar.gz immortalwrt/feeds
-
           ls -lh YAIF-R2S-final.config
-
           ls -lh YAIF-feeds-runtime.conf
-
           ls -lh YAIF-feeds-runtime-dir.tar.gz
 
       - name: Upload final config
-
         uses: actions/upload-artifact@v4
-
         with:
           name: YAIF-R2S-build-state
-
           retention-days: 90
-
           path: |
             YAIF-R2S-final.config
             YAIF-feeds-runtime.conf
@@ -792,176 +486,75 @@ jobs:
       # =====================================================
       # 9. SSH 调试
       # =====================================================
-
       - name: SSH debug
-
         if: ${{ inputs.ssh == true }}
-
         uses: mxschmitt/action-tmate@v3
-
         with:
           limit-access-to-actor: false
 
       # =====================================================
       # 10. 下载源码包
       # =====================================================
-
       - name: Download sources
-
         run: |
-
-
           cd immortalwrt
-
-
-
           make download -j$(nproc) V=s
 
       # =====================================================
       # 11. 编译固件
       # =====================================================
-
       - name: Build firmware
-
         run: |
-
-
           cd immortalwrt
-
-
-
           make -j2 V=s
 
       # =====================================================
       # 13. 整理固件
       # =====================================================
-
       - name: Prepare firmware files
-
         run: |
-
-
           mkdir -p release
-
-
-
-
-          cp \
-
-            immortalwrt/bin/targets/rockchip/armv8/*sysupgrade.img.gz \
-
-            release/ || true
-
-
-
-
-          cp \
-
-            immortalwrt/bin/targets/rockchip/armv8/sha256sums \
-
-            release/ || true
-
-
-
-
-          cp \
-
-            immortalwrt/bin/targets/rockchip/armv8/config.buildinfo \
-
-            release/ || true
-
-
-
-
-          cp \
-
-            immortalwrt/bin/targets/rockchip/armv8/*.manifest \
-
-            release/ || true
-
-
-
-
-          cp \
-
-            immortalwrt/.config \
-
-            release/YAIF-R2S.config
-
-
-
-
+          cp immortalwrt/bin/targets/rockchip/armv8/*sysupgrade.img.gz release/ || true
+          cp immortalwrt/bin/targets/rockchip/armv8/sha256sums release/ || true
+          cp immortalwrt/bin/targets/rockchip/armv8/config.buildinfo release/ || true
+          cp immortalwrt/bin/targets/rockchip/armv8/*.manifest release/ || true
+          cp immortalwrt/.config release/YAIF-R2S.config
           ls -lh release
 
       # =====================================================
       # 14. 上传固件
       # =====================================================
-
       - name: Upload firmware
-
         uses: actions/upload-artifact@v4
-
         with:
           name: YAIF-25.12.1-R2S-${{ github.run_number }}
-
           retention-days: 90
-
           path: |
-
             release/
 
       # =====================================================
       # 15. Release
       # =====================================================
-
       - name: Create GitHub Release
-
         if: ${{ inputs.release == true }}
-
         uses: softprops/action-gh-release@v2
-
         with:
           tag_name: YAIF-25.12.1-R2S-build-${{ github.run_id }}
-
           name: YAIF-25.12.1 NanoPi R2S Build ${{ github.run_number }}
-
           body: |
-
-
             YAIF-25.12.1 NanoPi R2S
-
-
             ImmortalWrt 25.12.1
-
-
             Target:
-
             rockchip armv8
-
-
             Device:
-
             FriendlyARM NanoPi R2S
-
-
             Kernel:
-
             Linux 6.12
-
-
             Build:
-
             ${{ github.sha }}
-
-
             Artifact:
-
             - sysupgrade.img.gz
-
             - sha256sums
-
             - config.buildinfo
-
             - manifest
-
             - YAIF-R2S.config
