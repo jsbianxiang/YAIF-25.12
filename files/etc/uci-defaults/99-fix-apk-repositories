@@ -1,0 +1,12 @@
+#!/bin/sh
+
+REPO="/etc/apk/repositories.d/distfeeds.list"
+
+[ -f "$REPO" ] || exit 0
+
+sed -i \
+    -e '/\/nikki\/packages\.adb/d' \
+    -e '/\/video\/packages\.adb/d' \
+    "$REPO"
+
+exit 0

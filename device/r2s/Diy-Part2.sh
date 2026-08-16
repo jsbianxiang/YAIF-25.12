@@ -14,6 +14,8 @@ if [ -d "../files" ] && [ "$(ls -A ../files 2>/dev/null)" ]; then
 
     cp -rf ../files/. ./files/
 
+    chmod +x ./files/etc/uci-defaults/* 2>/dev/null || true
+
 else
 
     echo "==> 未发现自定义 files"
@@ -24,6 +26,14 @@ fi
 # ---------------------------------------------------------
 # 2. 检查 APK 配置是否存在
 # ---------------------------------------------------------
+
+echo "==> 检查 uci-defaults 补丁..."
+
+if [ -f "./files/etc/uci-defaults/99-fix-apk-repositories" ]; then
+    echo "OK: APK repository fix uci-default exists"
+else
+    echo "WARNING: APK repository fix missing"
+fi
 
 echo "==> 检查 APK 预置文件..."
 
