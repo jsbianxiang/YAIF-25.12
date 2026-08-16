@@ -165,6 +165,7 @@ jobs:
           ./scripts/feeds install -a
 
       - name: Debug feeds state
+
         run: |
           cd immortalwrt
           echo "===== feeds.conf ====="
@@ -178,6 +179,7 @@ jobs:
             || { echo "ERROR: nikki feed missing"; exit 1; }
 
       - name: Save feeds state
+
         run: |
           cd immortalwrt
           echo "===== Save feeds configuration ====="
@@ -185,7 +187,7 @@ jobs:
           ls -lh ../YAIF-feeds.conf
 
       # =====================================================
-      # 5. 注入 files
+      # 4. 注入 files
       # =====================================================
 
       - name: Inject files
@@ -217,7 +219,7 @@ jobs:
           fi
 
       # =====================================================
-      # 6. 应用 config.seed
+      # 5. 应用 config.seed
       #
       # 唯一配置入口
       #
@@ -239,7 +241,7 @@ jobs:
           make defconfig
 
       # =====================================================
-      # 6.1 调试 APK repository 生成逻辑
+      # 5.1 调试 APK repository 生成逻辑
       # =====================================================
       - name: Trace APK repository generation
 
@@ -249,7 +251,7 @@ jobs:
           grep -R "distfeeds" . 2>/dev/null || true
 
       # =====================================================
-      # 6.2 APK runtime 检查
+      # 5.2 APK runtime 检查
       #
       # 验证 ImmortalWrt 25.12 APK 配置生成链
       #
@@ -285,7 +287,7 @@ jobs:
           grep -R "repositories.d" . 2>/dev/null || true
 
       # =====================================================
-      # 7.2 禁止旧代理组件
+      # 6.2 禁止旧代理组件
       #
       # 防止配置漂移
       #
@@ -311,7 +313,7 @@ jobs:
           echo "Forbidden packages clean"
 
       # =====================================================
-      # 8. 保存最终配置
+      # 7. 保存最终配置
       # =====================================================
       - name: Save final config
         run: |
@@ -336,7 +338,7 @@ jobs:
             device/r2s/config.seed
 
       # =====================================================
-      # 9. 下载源码包
+      # 8. 下载源码包
       # =====================================================
       - name: Download sources
         run: |
@@ -344,7 +346,7 @@ jobs:
           make download -j$(nproc) V=s
 
       # =====================================================
-      # 10. SSH 调试
+      # 9. SSH 调试
       # =====================================================
       - name: SSH debug
         if: ${{ inputs.ssh == true }}
@@ -358,10 +360,24 @@ jobs:
       - name: Build firmware
         run: |
           cd immortalwrt
-          make -j2 V=s
+
+          echo "==> Start firmware build"
+
+          if make -j$(nproc) V=s; then
+
+              echo "==> Build completed"
+
+          else
+
+              echo "==> Parallel build failed"
+              echo "==> Falling back to single thread"
+
+              make -j1 V=s
+
+          fi
 
       # =====================================================
-      # 13. 整理固件
+      # 11. 整理固件
       # =====================================================
       - name: Prepare firmware files
         run: |
@@ -369,19 +385,30 @@ jobs:
 
           TARGET_DIR="immortalwrt/bin/targets/rockchip/armv8"
 
-          test -f ${TARGET_DIR}/*sysupgrade.img.gz
+          SYSUPGRADE=$(ls ${TARGET_DIR}/*sysupgrade.img.gz 2>/dev/null | head -n1)
 
-          cp ${TARGET_DIR}/*sysupgrade.img.gz release/
-          cp ${TARGET_DIR}/sha256sums release/ || true
-          cp ${TARGET_DIR}/config.buildinfo release/ || true
-          cp ${TARGET_DIR}/*.manifest release/ || true
+          if [ -z "$SYSUPGRADE" ]; then
+              echo "ERROR: sysupgrade image not found"
+              exit 1
+          fi
+
+          cp "$SYSUPGRADE" release/
+
+          cp ${TARGET_DIR}/sha256sums release/
+          cp ${TARGET_DIR}/config.buildinfo release/
+          cp ${TARGET_DIR}/*.manifest release/
 
           cp immortalwrt/.config release/YAIF-R2S.config
 
           ls -lh release
 
+          test -n "$(ls release/* 2>/dev/null)" || {
+              echo "ERROR: release directory empty"
+              exit 1
+          }
+
       # =====================================================
-      # 14. 上传固件
+      # 12. 上传固件
       # =====================================================
       - name: Upload firmware
         uses: actions/upload-artifact@v4
@@ -395,7 +422,7 @@ jobs:
             release/*
 
       # =====================================================
-      # 15. Release
+      # 13. Release
       # =====================================================
       - name: Create GitHub Release
         if: ${{ inputs.release == true }}

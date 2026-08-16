@@ -1,36 +1,173 @@
+# =========================================================
+# YAIF-25.12 R2S DHCP / DNS 配置
+#
+# 默认运行模式:
+#   二级路由模式
+#
+# 功能:
+#   - LAN DHCP 地址分配
+#   - LAN DNS 本地服务
+#   - IPv6 RA 地址通告
+#
+# DNS 架构:
+#   - Mihomo TUN 模式负责运行时 DNS 劫持
+#   - 不采用 dnsmasq 转发到 Mihomo 1053 端口
+#   - 保留系统 DNS 备用解析能力
+#
+# IPv6:
+#   - WAN6 获取运营商 IPv6 前缀
+#   - LAN 通过 RA 向客户端分配 IPv6
+# =========================================================
+
+
+# ---------------------------------------------------------
+# 1. dnsmasq 基础 DNS 服务配置
+#
+# 提供 LAN 内部 DNS 服务。
+#
+# 主要功能:
+#   - 本地域名解析
+#   - DHCP 主机名解析
+#   - DNS 参数优化
+#   - 本地服务发现
+#
+# DNS代理:
+#   正常运行时由 Mihomo TUN 接管外部 DNS 请求
+# ---------------------------------------------------------
 
 config dnsmasq
+
+	# 不启用 dnsmasq DNS 强制重定向
+	#
+	# DNS 流量由 Mihomo TUN dns-hijack 接管
 	option dns_redirect '0'
+
+	# 禁止解析无效域名请求
 	option domainneeded '1'
+
+	# 根据接口返回本地地址
 	option localise_queries '1'
+
+	# 开启 DNS Rebind 防护
 	option rebind_protection '1'
+
+	# 允许 localhost DNS 查询
 	option rebind_localhost '1'
+
+	# LAN 本地域名
 	option local '/lan/'
+
+	# 默认本地域名后缀
 	option domain 'lan'
+
+	# 自动扩展 DHCP 主机名
 	option expandhosts '1'
+
+	# 上游 DNS 异常时允许使用过期缓存
 	option use_stale_cache '3600'
+
+	# 禁用负缓存
 	option nonegcache '1'
+
+	# 作为本地域名权威 DNS
 	option authoritative '1'
+
+	# 读取静态 DHCP 主机信息
 	option readethers '1'
+
+	# DHCP 租约文件
 	option leasefile '/tmp/dhcp.leases'
+
+	# 仅向本地接口提供服务
 	option localservice '1'
+
+	# EDNS 最大数据包大小
+	#
+	# 兼容 IPv4 / IPv6 DNS 环境
 	option ednspacket_max '1232'
+
+	# DNS 最大并发转发数量
 	option dnsforwardmax '150'
-	option cachesize '150'
+
+	# 禁用 dnsmasq DNS 缓存
+	#
+	# DNS缓存逻辑由 Mihomo 管理
+	option cachesize '0'
+
+	# 不设置最小缓存时间
 	option min_cache_ttl '0'
+
+	# 设置最大缓存时间
 	option max_cache_ttl '3600'
 
 
+# ---------------------------------------------------------
+# 2. LAN DHCP 服务配置
+#
+# 为 LAN 客户端提供 IPv4 地址分配。
+#
+# LAN:
+#   br-lan
+#
+# IPv4:
+#   DHCP 自动分配地址
+#
+# IPv6:
+#   通过 RA 向客户端发布 IPv6 信息
+# ---------------------------------------------------------
+
 config dhcp 'lan'
+
+	# 绑定 LAN 接口
 	option interface 'lan'
+
+	# DHCP 地址池起始地址
+	#
+	# 示例:
+	# 192.168.2.100
 	option start '100'
+
+	# DHCP 地址池数量
+	#
+	# 100-249 共150个地址
 	option limit '150'
+
+	# DHCP 租约时间
 	option leasetime '12h'
+
+	# 启用 IPv4 DHCP 服务
 	option dhcpv4 'server'
+
+
+# ---------------------------------------------------------
+# 3. IPv6 RA 地址通告配置
+#
+# IPv6 地址来源:
+#
+#   WAN6
+#     |
+#     | DHCPv6-PD
+#     |
+#   LAN /64 前缀
+#
+# R2S 负责向 LAN 客户端发送 RA。
+#
+# DNS:
+#   不通过 RA 下发运营商 DNS
+#   DNS控制由 Mihomo TUN 完成
+# ---------------------------------------------------------
+
+	# 启用 IPv6 RA 服务
 	option ra 'server'
+
+	# IPv6 地址首选生命周期
 	option max_preferred_lifetime '2700'
+
+	# IPv6 地址有效生命周期
 	option max_valid_lifetime '5400'
+
+	# RA 优先级
 	option ra_preference 'medium'
+
+	# 不附加额外 RA 标志
 	list ra_flags 'none'
-
-

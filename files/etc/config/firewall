@@ -1,30 +1,157 @@
+# =========================================================
+# YAIF-25.12 R2S Firewall Configuration
+#
+# 默认模式:
+#   二级路由模式
+#
+# 网络角色:
+#   LAN:
+#     家庭内网区域
+#
+#   WAN:
+#     上级光猫 / 主路由出口
+#
+# 主要功能:
+#   - IPv4 NAT 转发
+#   - FullCone NAT
+#   - LAN 到 WAN 访问
+#
+# 代理兼容:
+#   关闭 Flow Offloading
+#   保证 Mihomo TUN / 策略路由正常工作
+# =========================================================
+
+
+# ---------------------------------------------------------
+# 1. 全局防火墙默认策略
+#
+# input:
+#   默认允许本机接收流量
+#
+# output:
+#   默认允许本机主动访问外部
+#
+# forward:
+#   默认允许区域间转发
+#
+# NAT:
+#   FullCone NAT 开启
+#
+# 性能:
+#   禁用硬件/软件流量卸载
+#   避免绕过代理策略
+# ---------------------------------------------------------
 
 config defaults
 	option input 'ACCEPT'
 	option output 'ACCEPT'
 	option forward 'ACCEPT'
+
+	# 开启 FullCone NAT
+	#
+	# 适用于:
+	#   - P2P
+	#   - PT
+	#   - NAT 穿透
 	option fullcone '1'
+
+	# 关闭 SYN Flood 防护
+	#
+	# 优先保证高连接场景性能
 	option synflood_protect '0'
+
+	# 不丢弃异常连接包
+	#
+	# 避免部分特殊网络场景误判
 	option drop_invalid '0'
+
+	# 禁用软件流量卸载
+	#
+	# 保证:
+	#   Mihomo TUN
+	#   策略路由
+	#   防火墙规则
+	# 正常生效
 	option flow_offloading '0'
+
+	# 禁用硬件流量卸载
 	option flow_offloading_hw '0'
+
+
+# ---------------------------------------------------------
+# 2. LAN 区域配置
+#
+# 内网区域:
+#   lan
+#
+# 默认信任内部设备。
+#
+# 用途:
+#   - 家庭终端访问
+#   - 管理访问
+#   - DHCP/DNS服务
+# ---------------------------------------------------------
 
 config zone
 	option name 'lan'
 	list network 'lan'
+
 	option input 'ACCEPT'
 	option output 'ACCEPT'
 	option forward 'ACCEPT'
+
+
+# ---------------------------------------------------------
+# 3. WAN 外部区域配置
+#
+# 上联:
+#   wan
+#   wan6
+#
+# 安全策略:
+#   - 禁止外部主动访问 R2S
+#   - 允许 R2S 主动访问互联网
+#   - 禁止 WAN 到 LAN 转发
+#
+# NAT:
+#   开启 IPv4 地址转换
+#
+# MTU:
+#   开启 MSS 修正
+#   解决部分 IPv6/PPPoE 网络问题
+# ---------------------------------------------------------
 
 config zone
 	option name 'wan'
 	list network 'wan'
 	list network 'wan6'
+
 	option input 'REJECT'
 	option output 'ACCEPT'
 	option forward 'REJECT'
+
+	# IPv4 NAT
 	option masq '1'
+
+	# TCP MSS 自动调整
 	option mtu_fix '1'
+
+
+# ---------------------------------------------------------
+# 4. LAN -> WAN 转发规则
+#
+# 允许:
+#
+#   LAN客户端
+#        |
+#        v
+#      WAN出口
+#
+# 用于:
+#   - IPv4访问互联网
+#   - IPv6访问互联网
+#   - Mihomo代理流量转发
+# ---------------------------------------------------------
 
 config forwarding
 	option src 'lan'
