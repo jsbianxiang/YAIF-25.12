@@ -272,9 +272,8 @@ CONFIG_KERNEL_NET_SCH_INGRESS=y
 # =========================================================
 
 
-CONFIG_IKCONFIG=y
-
-CONFIG_IKCONFIG_PROC=y
+CONFIG_KERNEL_IKCONFIG=y
+CONFIG_KERNEL_IKCONFIG_PROC=y
 
 
 
