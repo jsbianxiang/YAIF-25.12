@@ -359,6 +359,7 @@ jobs:
       # =====================================================
       - name: Build firmware
         run: |
+          set -e
           cd immortalwrt
 
           echo "==> Start firmware build"
@@ -381,18 +382,15 @@ jobs:
       # =====================================================
       - name: Prepare firmware files
         run: |
+          set -e
+
           mkdir -p release
 
           TARGET_DIR="immortalwrt/bin/targets/rockchip/armv8"
 
-          SYSUPGRADE=$(ls ${TARGET_DIR}/*sysupgrade.img.gz 2>/dev/null | head -n1)
+          echo "==> Copy sysupgrade images"
 
-          if [ -z "$SYSUPGRADE" ]; then
-              echo "ERROR: sysupgrade image not found"
-              exit 1
-          fi
-
-          cp "$SYSUPGRADE" release/
+          cp ${TARGET_DIR}/*sysupgrade.img.gz release/
 
           cp ${TARGET_DIR}/sha256sums release/
           cp ${TARGET_DIR}/config.buildinfo release/
@@ -400,10 +398,14 @@ jobs:
 
           cp immortalwrt/.config release/YAIF-R2S.config
 
+          echo "sysupgrade count:"
+          ls ${TARGET_DIR}/*sysupgrade.img.gz | wc -l
+
+          echo "==> Release files:"
           ls -lh release
 
-          test -n "$(ls release/* 2>/dev/null)" || {
-              echo "ERROR: release directory empty"
+          test -n "$(ls release/*sysupgrade.img.gz 2>/dev/null)" || {
+              echo "ERROR: sysupgrade image missing"
               exit 1
           }
 
@@ -458,7 +460,8 @@ jobs:
 
             | File | Description |
             | --- | --- |
-            | *.sysupgrade.img.gz | Upgrade firmware |
+            | squashfs-sysupgrade.img.gz | 推荐长期运行版本 |
+            | ext4-sysupgrade.img.gz | 可写系统版本 |
             | sha256sums | SHA256 checksum |
             | config.buildinfo | Build information |
             | manifest | Package list |
