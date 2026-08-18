@@ -374,10 +374,26 @@ CONFIG_PACKAGE_ntp-utils=y
 
 
 # =========================================================
-# 22. TCP Performance / Google BBR congestion control
+# 22-1. TCP Performance & BBR 拥塞控制
 # =========================================================
-
 CONFIG_KERNEL_TCP_CONG_BBR=y
 CONFIG_PACKAGE_kmod-tcp-bbr=y
+CONFIG_KERNEL_DEFAULT_TCP_CONG="bbr"
 
+# =========================================================
+# 22-2. Queueing Discipline (qdisc)
+# =========================================================
+# FQ：内建，确保 qdisc 可用
+CONFIG_KERNEL_NET_SCH_FQ=y
 
+# 基础调度器模块，包含 fq_codel 等
+CONFIG_PACKAGE_kmod-sched-core=y
+
+# CAKE：保留，便于后续手动测试 Bufferbloat
+CONFIG_PACKAGE_kmod-sched-cake=y
+
+# =========================================================
+# 22-3. Network Tools
+# =========================================================
+# tc 命令行工具
+CONFIG_PACKAGE_tc-tiny=y
