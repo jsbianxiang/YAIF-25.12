@@ -5,35 +5,39 @@
 #   二级路由模式
 #
 # 功能:
-#   - LAN DHCP 地址分配
-#   - LAN DNS 本地服务
+#   - LAN DHCPv4 地址分配
+#   - LAN 本地 DNS 服务
 #   - IPv6 RA 地址通告
 #
 # DNS 架构:
 #   - Mihomo TUN 模式负责运行时 DNS 劫持
-#   - 不采用 dnsmasq 转发到 Mihomo 1053 端口
-#   - 保留系统 DNS 备用解析能力
+#   - dnsmasq 不转发 DNS 到 Mihomo 1053 端口
+#   - 保留 dnsmasq 本地 DNS 服务
 #
 # IPv6:
-#   - WAN6 获取运营商 IPv6 前缀
-#   - LAN 通过 RA 向客户端分配 IPv6
+#   - WAN6 通过 DHCPv6 获取运营商 IPv6 前缀
+#   - LAN 通过 RA 向客户端通告 IPv6 前缀
+#   - 不通过 RA 下发 DNS 地址
 # =========================================================
 
 
-# ---------------------------------------------------------
-# 1. dnsmasq 基础 DNS 服务配置
+# =========================================================
+# 1. dnsmasq 基础 DNS 服务
+# =========================================================
 #
 # 提供 LAN 内部 DNS 服务。
 #
 # 主要功能:
 #   - 本地域名解析
 #   - DHCP 主机名解析
-#   - DNS 参数优化
 #   - 本地服务发现
+#   - DNS 基础安全与兼容性设置
 #
-# DNS代理:
-#   正常运行时由 Mihomo TUN 接管外部 DNS 请求
-# ---------------------------------------------------------
+# 外部 DNS:
+#   正常运行时由 Mihomo TUN 的 dns-hijack 接管客户端
+#   DNS 请求。
+#
+# =========================================================
 
 config dnsmasq
 
@@ -42,13 +46,13 @@ config dnsmasq
 	# DNS 流量由 Mihomo TUN dns-hijack 接管
 	option dns_redirect '0'
 
-	# 禁止解析无效域名请求
+	# DNS 请求必须包含有效域名
 	option domainneeded '1'
 
-	# 根据接口返回本地地址
+	# 根据请求接口返回对应的本地地址
 	option localise_queries '1'
 
-	# 开启 DNS Rebind 防护
+	# 启用 DNS Rebind 防护
 	option rebind_protection '1'
 
 	# 允许 localhost DNS 查询
@@ -60,16 +64,16 @@ config dnsmasq
 	# 默认本地域名后缀
 	option domain 'lan'
 
-	# 自动扩展 DHCP 主机名
+	# 自动为 DHCP 主机名添加本地域名
 	option expandhosts '1'
 
-	# 上游 DNS 异常时允许使用过期缓存
+	# DNS 上游异常时允许使用过期缓存
 	option use_stale_cache '3600'
 
 	# 禁用负缓存
 	option nonegcache '1'
 
-	# 作为本地域名权威 DNS
+	# 作为本地域名的权威 DNS
 	option authoritative '1'
 
 	# 读取静态 DHCP 主机信息
@@ -78,12 +82,13 @@ config dnsmasq
 	# DHCP 租约文件
 	option leasefile '/tmp/dhcp.leases'
 
-	# 仅向本地接口提供服务
+	# 仅向本地接口提供 DNS 服务
 	option localservice '1'
 
-	# EDNS 最大数据包大小
+	# EDNS 最大 DNS 数据包大小
 	#
-	# 兼容 IPv4 / IPv6 DNS 环境
+	# 1232 字节适用于 IPv4 / IPv6 DNS 环境，
+	# 可降低大 DNS 报文产生分片问题的概率。
 	option ednspacket_max '1232'
 
 	# DNS 最大并发转发数量
@@ -91,7 +96,7 @@ config dnsmasq
 
 	# 禁用 dnsmasq DNS 缓存
 	#
-	# DNS缓存逻辑由 Mihomo 管理
+	# DNS 缓存由 Mihomo DNS 引擎负责
 	option cachesize '0'
 
 	# 不设置最小缓存时间
@@ -101,63 +106,64 @@ config dnsmasq
 	option max_cache_ttl '3600'
 
 
-# ---------------------------------------------------------
-# 2. LAN DHCP 服务配置
-#
-# 为 LAN 客户端提供 IPv4 地址分配。
+# =========================================================
+# 2. LAN DHCPv4 / IPv6 RA 配置
+# =========================================================
 #
 # LAN:
 #   br-lan
 #
 # IPv4:
-#   DHCP 自动分配地址
+#   dnsmasq 提供 DHCPv4 地址分配
 #
 # IPv6:
-#   通过 RA 向客户端发布 IPv6 信息
-# ---------------------------------------------------------
+#   odhcpd 负责向 LAN 客户端发送 RA
+#
+# =========================================================
 
 config dhcp 'lan'
 
 	# 绑定 LAN 接口
 	option interface 'lan'
 
-	# DHCP 地址池起始地址
+	# DHCPv4 地址池起始主机号
 	#
-	# 示例:
-	# 192.168.2.100
+	# 例如:
+	#   192.168.2.100
 	option start '100'
 
-	# DHCP 地址池数量
+	# DHCPv4 地址池数量
 	#
-	# 100-249 共150个地址
+	# 100-249，共 150 个地址
 	option limit '150'
 
-	# DHCP 租约时间
+	# DHCPv4 租约时间
 	option leasetime '12h'
 
-	# 启用 IPv4 DHCP 服务
+	# 启用 DHCPv4 服务
 	option dhcpv4 'server'
 
 
-# ---------------------------------------------------------
-# 3. IPv6 RA 地址通告配置
-#
-# IPv6 地址来源:
-#
-#   WAN6
-#     |
-#     | DHCPv6-PD
-#     |
-#   LAN /64 前缀
-#
-# R2S 负责向 LAN 客户端发送 RA。
-#
-# DNS:
-#   不通过 RA 下发运营商 DNS
-#   DNS控制由 Mihomo TUN 完成
-# ---------------------------------------------------------
+	# -----------------------------------------------------
+	# IPv6 RA
+	# -----------------------------------------------------
+	#
+	# IPv6 地址来源:
+	#
+	#   WAN6
+	#     │
+	#     │ DHCPv6-PD
+	#     ▼
+	#   LAN IPv6 /64
+	#     │
+	#     ▼
+	#   LAN 客户端
+	#
+	# R2S 负责向 LAN 客户端发送 IPv6 RA。
+	#
+	# -----------------------------------------------------
 
-	# 启用 IPv6 RA 服务
+	# 启用 IPv6 Router Advertisement 服务
 	option ra 'server'
 
 	# IPv6 地址首选生命周期
@@ -167,7 +173,58 @@ config dhcp 'lan'
 	option max_valid_lifetime '5400'
 
 	# RA 优先级
-	option ra_preference 'medium'
+	#
+	# low    = 低
+	# medium = 一般
+	# high   = 高
+	option ra_preference 'high'
 
 	# 不附加额外 RA 标志
 	list ra_flags 'none'
+
+	# 不通过 IPv6 RA 下发 DNS 服务器（RDNSS）
+	#
+	# 目的：
+	#   - 防止客户端获得 IPv6 DNS
+	#   - 避免 IPv6 DNS 抢跑 IPv4 DNS
+	#   - 统一客户端 DNS 入口
+	#
+	# IPv6 仅负责地址分配和路由通告，
+	# DNS 统一通过 IPv4 入口由 Mihomo 接管。
+	option dns_service '0'
+
+
+# =========================================================
+# 3. odhcpd 全局配置
+# =========================================================
+#
+# odhcpd 负责 IPv6 RA / DHCPv6 等 IPv6 邻居配置服务。
+#
+# DHCPv4 仍由 dnsmasq 提供，因此这里不作为主 DHCPv4
+# 服务端运行。
+#
+# =========================================================
+
+config odhcpd 'odhcpd'
+
+	# 不作为 DHCPv4 主 DHCP 服务端
+	#
+	# DHCPv4 由 dnsmasq 提供
+	option maindhcp '0'
+
+	# odhcpd 租约数据库
+	option leasefile '/tmp/odhcpd.leases'
+
+	# DHCP 租约发生变化时执行更新脚本
+	option leasetrigger '/usr/sbin/odhcpd-update'
+
+	# 日志级别
+	#
+	# 4 = 较详细日志
+	option loglevel '4'
+
+	# odhcpd 运行时状态目录
+	option piodir '/tmp/odhcpd-piodir'
+
+	# odhcpd hosts 临时目录
+	option hostsdir '/tmp/hosts'

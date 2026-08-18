@@ -1,29 +1,35 @@
 # =========================================================
-# YAIF-25.12 R2S Network Configuration
+# YAIF-25.12 R2S 网络配置
 #
-# Device:
+# 设备:
 #   NanoPi R2S
 #
-# Default Mode:
-#   Secondary Router Mode
+# 工作模式:
+#   二级路由模式
 #
-# Port Definition:
-#   eth0 : Native onboard Ethernet (WAN)
-#   eth1 : USB Ethernet adapter (LAN)
+# 网口定义:
+#   eth0 : 板载原生网口（WAN）
+#   eth1 : USB 网卡（LAN）
 #
-# Network Role:
-#   - R2S provides LAN gateway
-#   - IPv4 NAT forwarding
-#   - IPv6 prefix delegation
-#   - Mihomo TUN proxy gateway
+# 网络功能:
+#   - R2S 提供 LAN 网关
+#   - IPv4 NAT 转发
+#   - IPv6 前缀委派
+#   - IPv6 LAN 地址分配
+#   - Mihomo TUN 代理网关
+#
+# DNS:
+#   - 不接受上游自动下发的 DNS
+#   - LAN 不通过 IPv6 RA 下发 DNS
+#   - 统一由 Mihomo TUN 接管 DNS
 # =========================================================
 
 
-# ---------------------------------------------------------
-# 1. 本地环回接口 (Loopback)
+# =========================================================
+# 1. 本地环回接口
 #
-# 系统内部通信接口
-# ---------------------------------------------------------
+# 用于系统内部本地通信。
+# =========================================================
 
 config interface 'loopback'
 	option device 'lo'
@@ -31,31 +37,31 @@ config interface 'loopback'
 	list ipaddr '127.0.0.1/8'
 
 
-# ---------------------------------------------------------
-# 2. 全局网络参数配置
+# =========================================================
+# 2. 全局网络参数
 #
-# packet steering:
-#   开启多核数据包处理
+# packet_steering:
+#   开启多核数据包处理。
 #
-# steering flows:
-#   设置流量分配数量
-# ---------------------------------------------------------
+# steering_flows:
+#   设置流量分配数量。
+# =========================================================
 
 config globals 'globals'
 	option packet_steering '1'
 	option steering_flows '128'
 
 
-# ---------------------------------------------------------
+# =========================================================
 # 3. LAN 局域网桥接设备
 #
 # eth1:
-#   USB 扩展网口
+#   USB 扩展网口。
 #
 # 用于连接:
 #   - 下级交换机
 #   - 家庭终端设备
-# ---------------------------------------------------------
+# =========================================================
 
 config device
 	option name 'br-lan'
@@ -63,55 +69,61 @@ config device
 	list ports 'eth1'
 
 
-# ---------------------------------------------------------
-# 4. LAN 局域网接口配置
+# =========================================================
+# 4. LAN 局域网接口
 #
-# 管理地址:
+# IPv4:
 #   192.168.2.1/24
 #
-# DHCP:
-#   由 R2S 提供
+# DHCPv4:
+#   由 R2S 提供。
 #
 # IPv6:
-#   从 WAN6 获取前缀后分配 /64
-# ---------------------------------------------------------
+#   从 WAN6 获取前缀后向 LAN 分配 /64。
+#
+# DNS:
+#   不通过 IPv6 RA 下发 DNS。
+# =========================================================
 
 config interface 'lan'
 	option device 'br-lan'
 	option proto 'static'
 	list ipaddr '192.168.2.1/24'
+
+	# 从上游 IPv6 前缀中为 LAN 分配 /64
 	option ip6assign '64'
+
+	# 不允许该接口继续向下游委派 IPv6 前缀
 	option delegate '0'
+
+	# 使用 EUI-64 生成 IPv6 接口标识
 	option ip6ifaceid 'eui64'
+
+	# 禁用多路径
 	option multipath 'off'
 
 
-# ---------------------------------------------------------
-# 5. WAN 广域网接口配置
+# =========================================================
+# 5. WAN 广域网接口
 #
 # eth0:
-#   原生板载网口
+#   板载原生网口。
 #
-# 上联设备:
-#   光猫 / 主路由
-#
-# 当前模式:
-#   静态 IPv4 上联
+# 上联:
+#   光猫 / 主路由。
 #
 # IPv4:
 #   R2S WAN:
-#       192.168.1.2
+#     192.168.1.2/24
 #
-#   Gateway:
-#       192.168.1.1
+#   网关:
+#     192.168.1.1
 #
 # DNS:
-#   使用固定国内 DNS
-#   防止运营商 DNS 注入
+#   使用固定 DNS，不接受上游自动下发 DNS。
 #
-# 该 DNS 作为基础网络备用解析。
-# 正常运行时 DNS 由 Mihomo TUN 接管。
-# ---------------------------------------------------------
+#   正常运行时，客户端 DNS 由 Mihomo TUN 接管。
+# =========================================================
 
 config interface 'wan'
 	option device 'eth0'
@@ -119,35 +131,54 @@ config interface 'wan'
 	list ipaddr '192.168.1.2/24'
 	option gateway '192.168.1.1'
 	option broadcast '192.168.1.255'
+
+	# 固定 DNS
+	#
+	# 不使用上游自动提供的 DNS。
 	list dns '119.29.29.29'
+
+	# 禁用多路径
 	option multipath 'off'
 
 
-# ---------------------------------------------------------
-# 6. WAN6 IPv6 接口配置
+# =========================================================
+# 6. WAN6 IPv6 接口
 #
-# IPv6 获取方式:
-#   DHCPv6 Prefix Delegation
+# 获取方式:
+#   DHCPv6
 #
-# 作用:
-#   - 从上级网络获取 IPv6 前缀
-#   - 向 LAN 分配 IPv6 地址
+# 主要作用:
+#   - 从上游获取 IPv6 地址
+#   - 请求 IPv6 Prefix Delegation
+#   - 为 LAN 提供 IPv6 前缀
 #
 # DNS:
-#   不接受上级 IPv6 DNS
+#   不接受上游 DHCPv6 自动提供的 DNS。
 #
 # 原因:
 #   - 避免运营商 DNS 注入
-#   - DNS控制由 Mihomo TUN 完成
+#   - 避免 IPv6 DNS 抢跑
+#   - 统一 DNS 入口
+#   - DNS 由 Mihomo TUN 接管
 #
 # IPv6 与 IPv4 共用 eth0 出口。
-# ---------------------------------------------------------
+# =========================================================
 
 config interface 'wan6'
 	option device 'eth0'
 	option proto 'dhcpv6'
+
+	# 不主动发送 DHCPv6 Release
 	option norelease '1'
+
+	# 不接受上游自动提供的 DNS
 	option peerdns '0'
+
+	# 尝试获取 IPv6 地址
 	option reqaddress 'try'
+
+	# 自动请求 Prefix Delegation
 	option reqprefix 'auto'
+
+	# 禁用多路径
 	option multipath 'off'

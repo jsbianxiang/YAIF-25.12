@@ -1,158 +1,389 @@
 # =========================================================
-# YAIF-25.12 R2S Firewall Configuration
+# YAIF-25.12 R2S 防火墙配置
 #
-# 默认模式:
-#   二级路由模式
+# 基础版本:
+#   ImmortalWrt 25.12.1 官方默认防火墙配置
 #
-# 网络角色:
-#   LAN:
-#     家庭内网区域
+# 网络:
+#   LAN  -> 家庭内网
+#   WAN  -> 上级光猫 / 主路由
+#   WAN6 -> 上游 IPv6 / DHCPv6 / 前缀委派
 #
-#   WAN:
-#     上级光猫 / 主路由出口
-#
-# 主要功能:
-#   - IPv4 NAT 转发
+# 功能:
+#   - IPv4 NAT
+#   - IPv6
+#   - IPv6 DHCPv6 / MLD / ICMPv6
 #   - FullCone NAT
-#   - LAN 到 WAN 访问
+#   - LAN -> WAN 转发
+#   - Nikki / Mihomo 防火墙集成
+#   - 禁用软件流量分载
+#   - 禁用硬件流量分载
 #
-# 代理兼容:
-#   关闭 Flow Offloading
-#   保证 Mihomo TUN / 策略路由正常工作
+# 说明:
+#   本文件会作为最终 /etc/config/firewall 使用，
+#   因此以官方默认配置为基础，仅加入 YAIF 所需修改。
+#
 # =========================================================
 
 
-# ---------------------------------------------------------
+# =========================================================
 # 1. 全局防火墙默认策略
-#
-# input:
-#   默认允许本机接收流量
-#
-# output:
-#   默认允许本机主动访问外部
-#
-# forward:
-#   默认允许区域间转发
-#
-# NAT:
-#   FullCone NAT 开启
-#
-# 性能:
-#   禁用硬件/软件流量卸载
-#   避免绕过代理策略
-# ---------------------------------------------------------
+# =========================================================
 
 config defaults
+
+	# 默认允许进入路由器的流量
 	option input 'ACCEPT'
+
+	# 默认允许路由器发出的流量
 	option output 'ACCEPT'
+
+	# 默认允许转发流量
 	option forward 'ACCEPT'
 
-	# 开启 FullCone NAT
+	# 启用 FullCone NAT
 	#
 	# 适用于:
 	#   - P2P
 	#   - PT
-	#   - NAT 穿透
+	#   - 部分需要主动入站映射的应用
 	option fullcone '1'
 
-	# 关闭 SYN Flood 防护
+	# 禁用 SYN Flood 防护
 	#
-	# 优先保证高连接场景性能
+	# 当前配置针对高连接数及 P2P / PT 环境。
 	option synflood_protect '0'
 
-	# 不丢弃异常连接包
+	# 不主动丢弃 INVALID 状态连接
 	#
-	# 避免部分特殊网络场景误判
+	# 保持当前代理及复杂连接环境下的兼容性。
 	option drop_invalid '0'
 
-	# 禁用软件流量卸载
+	# 禁用软件流量分载
 	#
-	# 保证:
-	#   Mihomo TUN
-	#   策略路由
-	#   防火墙规则
-	# 正常生效
+	# 避免流量绕过:
+	#   - Mihomo TUN
+	#   - 策略路由
+	#   - 透明代理
+	#   - 防火墙拦截
 	option flow_offloading '0'
 
-	# 禁用硬件流量卸载
+	# 禁用硬件流量分载
+	#
+	# 保持代理流量经过正常防火墙及策略路由路径。
 	option flow_offloading_hw '0'
 
 
-# ---------------------------------------------------------
-# 2. LAN 区域配置
-#
-# 内网区域:
-#   lan
-#
-# 默认信任内部设备。
-#
-# 用途:
-#   - 家庭终端访问
-#   - 管理访问
-#   - DHCP/DNS服务
-# ---------------------------------------------------------
+# =========================================================
+# 2. LAN 区域
+# =========================================================
 
 config zone
 	option name 'lan'
+
+	# 将 lan 网络接口加入 LAN 防火墙区域
 	list network 'lan'
 
+	# 允许 LAN 客户端访问路由器本身
 	option input 'ACCEPT'
+
+	# 允许路由器向 LAN 客户端发送流量
 	option output 'ACCEPT'
+
+	# 允许 LAN 区域内部及向其他允许区域转发流量
 	option forward 'ACCEPT'
 
 
-# ---------------------------------------------------------
-# 3. WAN 外部区域配置
+# =========================================================
+# 3. WAN 区域
 #
-# 上联:
-#   wan
-#   wan6
+# IPv4:
+#   - NAT
+#   - 地址伪装
 #
-# 安全策略:
-#   - 禁止外部主动访问 R2S
-#   - 允许 R2S 主动访问互联网
-#   - 禁止 WAN 到 LAN 转发
+# IPv6:
+#   - DHCPv6
+#   - MLD
+#   - ICMPv6
+#   - IPv6 前缀委派
 #
-# NAT:
-#   开启 IPv4 地址转换
-#
-# MTU:
-#   开启 MSS 修正
-#   解决部分 IPv6/PPPoE 网络问题
-# ---------------------------------------------------------
+# =========================================================
 
 config zone
 	option name 'wan'
+
+	# IPv4 WAN 接口
 	list network 'wan'
+
+	# IPv6 WAN 接口
 	list network 'wan6'
 
+	# 默认拒绝从 WAN 进入路由器的连接
 	option input 'REJECT'
+
+	# 允许路由器主动访问 WAN
 	option output 'ACCEPT'
+
+	# 默认拒绝 WAN -> 其他区域的转发
 	option forward 'REJECT'
 
-	# IPv4 NAT
+	# 启用 IPv4 NAT 地址伪装
+	#
+	# LAN IPv4 客户端通过 R2S 访问上游网络时使用。
 	option masq '1'
 
-	# TCP MSS 自动调整
+	# 启用 TCP MSS 自动调整
+	#
+	# 用于降低不同链路 MTU 环境下的 TCP 分片问题。
 	option mtu_fix '1'
 
 
-# ---------------------------------------------------------
-# 4. LAN -> WAN 转发规则
+# =========================================================
+# 4. LAN -> WAN 转发
 #
 # 允许:
+#   - LAN -> IPv4 Internet
+#   - LAN -> IPv6 Internet
+#   - LAN -> 代理网络
 #
-#   LAN客户端
-#        |
-#        v
-#      WAN出口
-#
-# 用于:
-#   - IPv4访问互联网
-#   - IPv6访问互联网
-#   - Mihomo代理流量转发
-# ---------------------------------------------------------
+# =========================================================
 
 config forwarding
 	option src 'lan'
 	option dest 'wan'
+
+
+# =========================================================
+# 5. IPv4 基础规则
+# =========================================================
+
+
+# ---------------------------------------------------------
+# DHCPv4 地址续租
+#
+# WAN 使用 DHCP 获取 IPv4 地址时，
+# 允许 DHCP 客户端接收来自上游的 DHCP 响应。
+# ---------------------------------------------------------
+
+config rule
+	option name 'Allow-DHCP-Renew'
+	option src 'wan'
+	option proto 'udp'
+	option dest_port '68'
+	option family 'ipv4'
+	option target 'ACCEPT'
+
+
+# ---------------------------------------------------------
+# IPv4 Ping
+#
+# 允许 WAN 侧 IPv4 ICMP Echo Request。
+#
+# 用于允许外部对 R2S 进行 IPv4 Ping 测试。
+# ---------------------------------------------------------
+
+config rule
+	option name 'Allow-Ping'
+	option src 'wan'
+	option proto 'icmp'
+	option icmp_type 'echo-request'
+	option family 'ipv4'
+	option target 'ACCEPT'
+
+
+# ---------------------------------------------------------
+# IGMP
+#
+# 允许 IPv4 组播相关的 IGMP 流量。
+#
+# 某些组播服务可能需要此规则。
+# ---------------------------------------------------------
+
+config rule
+	option name 'Allow-IGMP'
+	option src 'wan'
+	option proto 'igmp'
+	option family 'ipv4'
+	option target 'ACCEPT'
+
+
+# =========================================================
+# 6. IPv6 DHCPv6
+#
+# 允许 WAN6 DHCPv6 客户端通信。
+#
+# UDP 546:
+#   DHCPv6 客户端端口
+#
+# 用于:
+#   - 获取 IPv6 地址
+#   - 获取 IPv6 前缀
+#   - DHCPv6-PD 前缀委派
+#
+# =========================================================
+
+config rule
+	option name 'Allow-DHCPv6'
+	option src 'wan'
+	option proto 'udp'
+	option dest_port '546'
+	option family 'ipv6'
+	option target 'ACCEPT'
+
+
+# =========================================================
+# 7. IPv6 MLD
+#
+# MLD（组播侦听发现）
+#
+# 用于 IPv6 组播成员管理。
+#
+# 源地址限制为 IPv6 链路本地地址范围。
+#
+# =========================================================
+
+config rule
+	option name 'Allow-MLD'
+	option src 'wan'
+	option proto 'icmp'
+	option src_ip 'fe80::/10'
+
+	# MLDv1 / MLDv2 相关报文
+	list icmp_type '130/0'
+	list icmp_type '131/0'
+	list icmp_type '132/0'
+	list icmp_type '143/0'
+
+	option family 'ipv6'
+	option target 'ACCEPT'
+
+
+# =========================================================
+# 8. IPv6 ICMP 入站
+#
+# 保留 IPv6 正常运行所需的 ICMPv6 控制报文。
+#
+# 包括:
+#   - Echo Request / Reply
+#   - Destination Unreachable
+#   - Packet Too Big
+#   - Time Exceeded
+#   - Bad Header
+#   - Unknown Header Type
+#   - Router Solicitation
+#   - Router Advertisement
+#   - Neighbor Solicitation
+#   - Neighbor Advertisement
+#
+# 其中 Packet Too Big 对 IPv6 路径 MTU 发现尤其重要。
+#
+# =========================================================
+
+config rule
+	option name 'Allow-ICMPv6-Input'
+	option src 'wan'
+	option proto 'icmp'
+
+	# IPv6 Ping
+	list icmp_type 'echo-request'
+	list icmp_type 'echo-reply'
+
+	# IPv6 错误及诊断报文
+	list icmp_type 'destination-unreachable'
+	list icmp_type 'packet-too-big'
+	list icmp_type 'time-exceeded'
+	list icmp_type 'bad-header'
+	list icmp_type 'unknown-header-type'
+
+	# IPv6 邻居发现及路由发现
+	list icmp_type 'router-solicitation'
+	list icmp_type 'neighbour-solicitation'
+	list icmp_type 'router-advertisement'
+	list icmp_type 'neighbour-advertisement'
+
+	# 限制 ICMPv6 入站速率
+	option limit '1000/sec'
+
+	option family 'ipv6'
+	option target 'ACCEPT'
+
+
+# =========================================================
+# 9. IPv6 ICMP 转发
+#
+# 允许经过 R2S 转发的必要 ICMPv6 控制报文。
+#
+# 对以下功能非常重要:
+#   - IPv6 路径 MTU 发现
+#   - Destination Unreachable
+#   - Packet Too Big
+#   - Time Exceeded
+#   - IPv6 网络故障诊断
+#
+# =========================================================
+
+config rule
+	option name 'Allow-ICMPv6-Forward'
+	option src 'wan'
+	option dest '*'
+	option proto 'icmp'
+
+	list icmp_type 'echo-request'
+	list icmp_type 'echo-reply'
+	list icmp_type 'destination-unreachable'
+	list icmp_type 'packet-too-big'
+	list icmp_type 'time-exceeded'
+	list icmp_type 'bad-header'
+	list icmp_type 'unknown-header-type'
+
+	# 限制 ICMPv6 转发速率
+	option limit '1000/sec'
+
+	option family 'ipv6'
+	option target 'ACCEPT'
+
+
+# =========================================================
+# 10. IPSec
+#
+# 保留标准 IPSec 防火墙兼容规则。
+#
+# ESP:
+#   IPSec 加密封装协议
+#
+# ISAKMP:
+#   IPSec IKE 协商使用 UDP 500
+#
+# =========================================================
+
+config rule
+	option name 'Allow-IPSec-ESP'
+	option src 'wan'
+	option dest 'lan'
+	option proto 'esp'
+	option target 'ACCEPT'
+
+
+config rule
+	option name 'Allow-ISAKMP'
+	option src 'wan'
+	option dest 'lan'
+	option dest_port '500'
+	option proto 'udp'
+	option target 'ACCEPT'
+
+
+# =========================================================
+# 11. Nikki 防火墙集成
+#
+# Nikki 在此处调用自己的防火墙脚本，
+# 动态加入 Mihomo / 透明代理相关的 nftables 规则。
+#
+# 不建议将 Nikki 生成的规则直接手工写入本文件。
+#
+# =========================================================
+
+config include 'nikki'
+	option type 'script'
+	option path '/etc/nikki/scripts/firewall_include.sh'
+	option fw4_compatible '1'
