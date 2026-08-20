@@ -130,17 +130,9 @@ config interface 'lan'
 
 config interface 'wan'
 	option device 'eth0'
-	option proto 'static'
-	list ipaddr '192.168.1.2/24'
-	option gateway '192.168.1.1'
-	option broadcast '192.168.1.255'
-
-	# 固定 DNS
-	#
-	# 不使用上游自动提供的 DNS。
+	option proto 'dhcp'
+	option peerdns '0'
 	list dns '119.29.29.29'
-
-	# 禁用多路径
 	option multipath 'off'
 
 
