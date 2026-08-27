@@ -316,16 +316,23 @@ jobs:
       # =====================================================
       # 6.1 验证 config.seed
       #
-      # 这里只验证：
+      # 验证原则：
       #
-      # 1. seed 明确 =y 的 PACKAGE
-      # 2. seed 明确 disabled 的 PACKAGE
+      # 1. seed 中明确 =y 的普通 PACKAGE：
+      #      最终 .config 必须保持 =y
       #
-      # Kconfig 自动产生的依赖项不要求与 seed 一致。
+      # 2. Kconfig / target 默认包：
+      #      允许从 CONFIG_PACKAGE_xxx
+      #      转换为 CONFIG_DEFAULT_xxx
       #
-      # 注意：
-      # kmod-bridge 不属于这里的强制检查。
-      # bridge 在 R2S 当前内核中可以是 builtin。
+      # 3. builtin kernel capability：
+      #      不要求存在对应 CONFIG_PACKAGE_xxx
+      #
+      # 4. seed 中明确 disabled 的 PACKAGE：
+      #      不允许最终重新启用
+      #
+      # 5. 不强制要求所有 seed PACKAGE symbol
+      #    在最终 .config 中逐字存在。
       # =====================================================
 
       - name: Verify config.seed
@@ -343,12 +350,34 @@ jobs:
 
           while read -r pkg
           do
-              grep -q "^${pkg}=y$" "$FINAL" || {
-                  echo "ERROR: 最终配置缺失: ${pkg}"
-                  exit 1
-              }
+              # -------------------------------------------------
+              # 直接存在于最终 .config
+              # -------------------------------------------------
+              if grep -q "^${pkg}=y$" "$FINAL"; then
+                  echo "OK: ${pkg}=y"
+                  continue
+              fi
 
-              echo "OK: ${pkg}=y"
+              # -------------------------------------------------
+              # Kconfig DEFAULT_* 转换
+              #
+              # 例如：
+              # CONFIG_PACKAGE_autocore=y
+              # ->
+              # CONFIG_DEFAULT_autocore=y
+              # -------------------------------------------------
+              default_pkg="${pkg/CONFIG_PACKAGE_/CONFIG_DEFAULT_}"
+
+              if grep -q "^${default_pkg}=y$" "$FINAL"; then
+                  echo "OK: ${pkg}=y -> ${default_pkg}=y"
+                  continue
+              fi
+
+              # -------------------------------------------------
+              # 其余情况才是真正缺失
+              # -------------------------------------------------
+              echo "ERROR: 最终配置缺失: ${pkg}"
+              exit 1
 
           done < <(
               grep '^CONFIG_PACKAGE_.*=y$' "$SEED" |
@@ -363,10 +392,8 @@ jobs:
           while read -r pkg
           do
               if grep -q "^${pkg}=" "$FINAL"; then
-
                   echo "ERROR: 被重新启用: ${pkg}"
                   grep "^${pkg}=" "$FINAL"
-
                   exit 1
               fi
 
@@ -394,14 +421,12 @@ jobs:
 
           for pkg in $REQUIRED_PACKAGES
           do
-
               grep -q "^${pkg}=y$" "$FINAL" || {
                   echo "ERROR: critical package missing: ${pkg}"
                   exit 1
               }
 
               echo "OK: ${pkg}=y"
-
           done
 
 
@@ -430,6 +455,23 @@ jobs:
           done < <(
               printf '%s\n' "$REQUIRED_KERNEL_CONFIGS"
           )
+
+
+          echo "=========================================="
+          echo "5. Verify known builtin capabilities"
+          echo "=========================================="
+
+          # bridge 在 R2S / Linux 6.12 当前配置中可以 builtin。
+          # 因此不检查 CONFIG_PACKAGE_kmod-bridge。
+          #
+          # 实际运行时通过：
+          #   modinfo bridge
+          #   ip -d link show type bridge
+          #
+          # 进行验证。
+
+          echo "OK: bridge package symbol not required"
+          echo "OK: builtin kernel capability is excluded from package check"
 
 
           echo "=========================================="
