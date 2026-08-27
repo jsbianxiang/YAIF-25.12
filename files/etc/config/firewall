@@ -32,14 +32,14 @@
 
 config defaults
 
-	# 默认允许进入路由器的流量
-	option input 'ACCEPT'
+	# 默认拒绝进入路由器的流量
+	option input 'REJECT'
 
 	# 默认允许路由器发出的流量
 	option output 'ACCEPT'
 
-	# 默认允许转发流量
-	option forward 'ACCEPT'
+	# 默认拒绝转发流量
+	option forward 'REJECT'
 
 	# 启用 FullCone NAT
 	#

@@ -97,7 +97,7 @@ config dnsmasq
 	# 禁用 dnsmasq DNS 缓存
 	#
 	# DNS 缓存由 Mihomo DNS 引擎负责
-	option cachesize '8000'
+	option cachesize '0'
 
 	# 不设置最小缓存时间
 	option min_cache_ttl '0'
@@ -177,7 +177,7 @@ config dhcp 'lan'
 	# low    = 低
 	# medium = 一般
 	# high   = 高
-	option ra_preference 'high'
+	option ra_preference 'medium'
 
 	# 不附加额外 RA 标志
 	list ra_flags 'none'

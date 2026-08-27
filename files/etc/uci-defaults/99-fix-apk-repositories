@@ -9,8 +9,8 @@ grep -q "mirrors.vsean.net" "$REPO" || exit 0
 sed -i \
     -e '/nikki.*packages\.adb/d' \
     -e '/video.*packages\.adb/d' \
-    -e 's#mirrors.vsean.net/immortalwrt#mirrors.jlu.edu.cn/immortalwrt#g' \
-    -e 's#mirrors.vsean.net/openwrt#mirrors.jlu.edu.cn/immortalwrt#g' \
+    -e 's#mirrors.vsean.net/immortalwrt#mirrors.ustc.edu.cn/immortalwrt#g' \
+    -e 's#mirrors.vsean.net/openwrt#mirrors.ustc.edu.cn/immortalwrt#g' \
     "$REPO"
 
 exit 0

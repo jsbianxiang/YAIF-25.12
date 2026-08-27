@@ -49,7 +49,7 @@ config interface 'loopback'
 
 config globals 'globals'
 	option packet_steering '1'
-	option steering_flows '128'
+
 
 
 # =========================================================
