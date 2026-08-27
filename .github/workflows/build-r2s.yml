@@ -33,7 +33,7 @@ jobs:
       # =====================================================
       # 1. 安装编译依赖
       #
-      # ImmortalWrt 25.12
+      # ImmortalWrt 25.12.1
       # Ubuntu 22.04
       # =====================================================
 
@@ -133,7 +133,7 @@ jobs:
           sudo apt-get clean
 
       # =====================================================
-      # 2. 拉取 ImmortalWrt 25.12.1
+      # 2. 拉取 ImmortalWrt v25.12.1
       # =====================================================
 
       - name: Clone ImmortalWrt v25.12.1
@@ -187,18 +187,12 @@ jobs:
 
           cd immortalwrt
 
-          echo "===== feeds state ====="
-          cat feeds.conf.default
+          test -d feeds/nikki || {
+            echo "ERROR: Nikki feed missing"
+            exit 1
+          }
 
-          echo "===== Nikki feed ====="
-
-          test -d feeds/nikki \
-            || {
-              echo "ERROR: Nikki feed missing"
-              exit 1
-            }
-
-          echo "Nikki feed OK"
+          echo "Nikki feed: OK"
 
       # =====================================================
       # 3.2 保存 feeds 状态
@@ -230,7 +224,7 @@ jobs:
           ../device/r2s/Diy-Part2.sh
 
       # =====================================================
-      # 4.1 验证注入文件
+      # 4.1 验证 APK repository
       # =====================================================
 
       - name: Verify injected files
@@ -239,27 +233,24 @@ jobs:
 
           cd immortalwrt
 
-          echo "===== APK files ====="
-          find files/etc/apk -type f 2>/dev/null || true
+          echo "===== APK repository files ====="
 
-          echo "===== APK repositories ====="
+          test -d files/etc/apk/repositories.d || {
+            echo "ERROR: files/etc/apk/repositories.d missing"
+            exit 1
+          }
 
-          if [ -d files/etc/apk/repositories.d ]; then
+          find files/etc/apk -type f -print
 
-              for f in files/etc/apk/repositories.d/*
-              do
-                  [ -f "$f" ] || continue
+          echo "===== Repository content ====="
 
-                  echo "---------- $f ----------"
-                  cat "$f"
-              done
+          for f in files/etc/apk/repositories.d/*
+          do
+              [ -f "$f" ] || continue
 
-          else
-
-              echo "ERROR: files/etc/apk/repositories.d missing"
-              exit 1
-
-          fi
+              echo "---------- $f ----------"
+              cat "$f"
+          done
 
       # =====================================================
       # 5. 应用 config.seed
@@ -267,11 +258,11 @@ jobs:
       # 唯一配置入口：
       #
       # config.seed
-      #     ↓
+      #      ↓
       # .config
-      #     ↓
+      #      ↓
       # make defconfig
-      #     ↓
+      #      ↓
       # 最终 .config
       # =====================================================
 
@@ -285,36 +276,56 @@ jobs:
 
           cp ../device/r2s/config.seed .config
 
-          echo "===== Running make defconfig ====="
+          echo "===== make defconfig ====="
 
           make defconfig
 
       # =====================================================
-      # 5.1 验证 Target
+      # 6. 禁止旧代理组件
       # =====================================================
 
-      - name: Verify target
+      - name: Check forbidden packages
         run: |
           set -e
 
           cd immortalwrt
 
-          echo "===== Target ====="
+          echo "===== Checking forbidden packages ====="
 
-          grep '^CONFIG_TARGET_rockchip=y$' .config
-          grep '^CONFIG_TARGET_rockchip_armv8=y$' .config
-          grep '^CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r2s=y$' .config
+          FORBIDDEN_PACKAGES="
+          CONFIG_PACKAGE_mihomo-alpha
+          CONFIG_PACKAGE_luci-app-attendedsysupgrade
+          CONFIG_PACKAGE_luci-i18n-attendedsysupgrade-zh-cn
+          CONFIG_PACKAGE_arptables-legacy
+          CONFIG_PACKAGE_ebtables-legacy
+          CONFIG_PACKAGE_ip6tables-legacy
+          CONFIG_PACKAGE_iptables-legacy
+          CONFIG_PACKAGE_xtables-legacy
+          "
+
+          for pkg in $FORBIDDEN_PACKAGES
+          do
+              if grep -q "^${pkg}=y$" .config; then
+                  echo "ERROR: forbidden package enabled: ${pkg}"
+                  exit 1
+              fi
+          done
+
+          echo "Forbidden packages: OK"
 
       # =====================================================
-      # 5.2 验证 config.seed
+      # 6.1 验证 config.seed
       #
-      # 检查：
+      # 这里只验证：
       #
-      # 1. seed 中明确 =y 的 PACKAGE
-      # 2. seed 中明确 disabled 的 PACKAGE
-      # 3. seed 中不存在的 PACKAGE symbol
+      # 1. seed 明确 =y 的 PACKAGE
+      # 2. seed 明确 disabled 的 PACKAGE
       #
-      # Kconfig 自动解析产生的额外依赖不视为错误。
+      # Kconfig 自动产生的依赖项不要求与 seed 一致。
+      #
+      # 注意：
+      # kmod-bridge 不属于这里的强制检查。
+      # bridge 在 R2S 当前内核中可以是 builtin。
       # =====================================================
 
       - name: Verify config.seed
@@ -330,64 +341,45 @@ jobs:
           echo "1. Verify explicitly enabled packages"
           echo "=========================================="
 
-          while read -r pkg; do
-
+          while read -r pkg
+          do
               grep -q "^${pkg}=y$" "$FINAL" || {
                   echo "ERROR: 最终配置缺失: ${pkg}"
                   exit 1
               }
+
+              echo "OK: ${pkg}=y"
 
           done < <(
               grep '^CONFIG_PACKAGE_.*=y$' "$SEED" |
               cut -d= -f1
           )
 
-          echo "Enabled package check: OK"
-
 
           echo "=========================================="
           echo "2. Verify explicitly disabled packages"
           echo "=========================================="
 
-          while read -r pkg; do
-
+          while read -r pkg
+          do
               if grep -q "^${pkg}=" "$FINAL"; then
 
                   echo "ERROR: 被重新启用: ${pkg}"
                   grep "^${pkg}=" "$FINAL"
-                  exit 1
 
+                  exit 1
               fi
+
+              echo "OK: ${pkg} disabled"
 
           done < <(
               grep '^# CONFIG_PACKAGE_.* is not set$' "$SEED" |
               sed 's/^# \(CONFIG_PACKAGE_[^ ]*\) is not set$/\1/'
           )
 
-          echo "Disabled package check: OK"
-
 
           echo "=========================================="
-          echo "3. Verify required package symbols"
-          echo "=========================================="
-
-          while read -r pkg; do
-
-              if ! grep -Eq "^${pkg}(=| is not set)" "$FINAL"; then
-                  echo "INFO: seed symbol not present in final Kconfig: ${pkg}"
-              fi
-
-          done < <(
-              grep -E '^(# )?CONFIG_PACKAGE_[^ =]+' "$SEED" |
-              sed -E 's/^# //; s/=.*//; s/ is not set.*//' |
-              sort -u
-          )
-
-          echo "Symbol check completed"
-
-
-          echo "=========================================="
-          echo "4. Verify critical YAIF packages"
+          echo "3. Verify critical YAIF packages"
           echo "=========================================="
 
           REQUIRED_PACKAGES="
@@ -395,7 +387,6 @@ jobs:
           CONFIG_PACKAGE_mihomo-meta
           CONFIG_PACKAGE_daed
           CONFIG_PACKAGE_bpftool-full
-          CONFIG_PACKAGE_kmod-bridge
           CONFIG_PACKAGE_kmod-tun
           CONFIG_PACKAGE_kmod-nft-fullcone
           CONFIG_PACKAGE_kmod-tcp-bbr
@@ -415,31 +406,30 @@ jobs:
 
 
           echo "=========================================="
-          echo "5. Verify forbidden legacy components"
+          echo "4. Verify important kernel capabilities"
           echo "=========================================="
 
-          FORBIDDEN_PACKAGES="
-          CONFIG_PACKAGE_mihomo-alpha
-          CONFIG_PACKAGE_luci-app-attendedsysupgrade
-          CONFIG_PACKAGE_luci-i18n-attendedsysupgrade-zh-cn
-          CONFIG_PACKAGE_arptables-legacy
-          CONFIG_PACKAGE_ebtables-legacy
-          CONFIG_PACKAGE_ip6tables-legacy
-          CONFIG_PACKAGE_iptables-legacy
-          CONFIG_PACKAGE_xtables-legacy
+          REQUIRED_KERNEL_CONFIGS="
+          CONFIG_IPV6=y
+          CONFIG_KERNEL_BPF=y
+          CONFIG_KERNEL_BPF_SYSCALL=y
+          CONFIG_KERNEL_BPF_JIT=y
+          CONFIG_KERNEL_DEBUG_INFO_BTF=y
+          CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y
           "
 
-          for pkg in $FORBIDDEN_PACKAGES
+          while read -r cfg
           do
-
-              if grep -q "^${pkg}=y$" "$FINAL"; then
-                  echo "ERROR: forbidden package enabled: ${pkg}"
+              grep -q "^${cfg}$" "$FINAL" || {
+                  echo "ERROR: kernel capability missing: ${cfg}"
                   exit 1
-              fi
+              }
 
-          done
+              echo "OK: ${cfg}"
 
-          echo "Forbidden package check: OK"
+          done < <(
+              printf '%s\n' "$REQUIRED_KERNEL_CONFIGS"
+          )
 
 
           echo "=========================================="
@@ -447,7 +437,7 @@ jobs:
           echo "=========================================="
 
       # =====================================================
-      # 6. 保存最终配置
+      # 7. 保存最终配置
       # =====================================================
 
       - name: Save final build state
@@ -456,8 +446,11 @@ jobs:
 
           test -f immortalwrt/.config
 
-          cp immortalwrt/.config YAIF-R2S-final.config
-          cp immortalwrt/feeds.conf.default YAIF-feeds-runtime.conf
+          cp immortalwrt/.config \
+            YAIF-R2S-final.config
+
+          cp immortalwrt/feeds.conf.default \
+            YAIF-feeds-runtime.conf
 
           tar czf \
             YAIF-feeds-runtime-dir.tar.gz \
@@ -472,11 +465,12 @@ jobs:
             YAIF-feeds-runtime-dir.tar.gz
 
       # =====================================================
-      # 6.1 上传构建状态
+      # 7.1 上传构建状态
       # =====================================================
 
       - name: Upload build state
         uses: actions/upload-artifact@v4
+
         with:
           name: YAIF-R2S-build-state
           retention-days: 90
@@ -489,9 +483,9 @@ jobs:
             device/r2s/config.seed
 
       # =====================================================
-      # 7. 下载所有源码包
+      # 8. 下载源码包
       #
-      # 全量编译前先完成 source download。
+      # 正式全量编译前完成所有 source download。
       # =====================================================
 
       - name: Download sources
@@ -500,14 +494,16 @@ jobs:
 
           cd immortalwrt
 
-          echo "===== Download all sources ====="
+          echo "=========================================="
+          echo "Download all sources"
+          echo "=========================================="
 
           make download \
             -j$(nproc) \
             V=s
 
       # =====================================================
-      # 8. SSH 调试
+      # 9. SSH 调试
       # =====================================================
 
       - name: SSH debug
@@ -519,15 +515,7 @@ jobs:
           limit-access-to-actor: false
 
       # =====================================================
-      # 9. 全量编译
-      #
-      # 第一阶段：
-      #   并行编译
-      #
-      # 如果失败：
-      #   自动使用 -j1 重新编译
-      #
-      # 这不是跳过错误，而是为了获得完整串行错误日志。
+      # 10. 全量编译
       # =====================================================
 
       - name: Build firmware
@@ -540,18 +528,19 @@ jobs:
           echo "Start full firmware build"
           echo "=========================================="
 
-          echo "CPU:"
+          echo "CPU threads:"
           nproc
 
-          echo "Build:"
-          make -j$(nproc) V=s
+          make \
+            -j$(nproc) \
+            V=s
 
           echo "=========================================="
           echo "Full firmware build completed"
           echo "=========================================="
 
       # =====================================================
-      # 10. 验证编译产物
+      # 11. 验证固件产物
       # =====================================================
 
       - name: Verify firmware output
@@ -560,15 +549,22 @@ jobs:
 
           TARGET_DIR="immortalwrt/bin/targets/rockchip/armv8"
 
-          echo "===== Target output ====="
+          echo "===== Target directory ====="
 
           test -d "$TARGET_DIR"
 
           ls -lh "$TARGET_DIR"
 
+
           echo "===== Sysupgrade images ====="
 
+          test -n "$(find "$TARGET_DIR" \
+            -maxdepth 1 \
+            -name '*sysupgrade.img.gz' \
+            -type f)"
+
           ls -lh "$TARGET_DIR"/*sysupgrade.img.gz
+
 
           echo "===== SHA256 ====="
 
@@ -591,7 +587,7 @@ jobs:
           echo "Firmware output verification: OK"
 
       # =====================================================
-      # 11. 整理固件
+      # 12. 整理固件
       # =====================================================
 
       - name: Prepare firmware files
@@ -602,15 +598,17 @@ jobs:
 
           TARGET_DIR="immortalwrt/bin/targets/rockchip/armv8"
 
-          echo "===== Copy firmware ====="
+          cp "$TARGET_DIR"/*sysupgrade.img.gz \
+            release/
 
-          cp "$TARGET_DIR"/*sysupgrade.img.gz release/
+          cp "$TARGET_DIR"/sha256sums \
+            release/
 
-          cp "$TARGET_DIR"/sha256sums release/
+          cp "$TARGET_DIR"/config.buildinfo \
+            release/
 
-          cp "$TARGET_DIR"/config.buildinfo release/
-
-          cp "$TARGET_DIR"/*.manifest release/
+          cp "$TARGET_DIR"/*.manifest \
+            release/
 
           cp immortalwrt/.config \
             release/YAIF-R2S.config
@@ -628,18 +626,8 @@ jobs:
             -type f |
             wc -l
 
-
-          test -n "$(find release \
-            -name '*sysupgrade.img.gz' \
-            -type f)" || {
-
-              echo "ERROR: sysupgrade image missing"
-              exit 1
-
-          }
-
       # =====================================================
-      # 12. 上传固件 Artifact
+      # 13. 上传固件
       # =====================================================
 
       - name: Upload firmware
@@ -656,7 +644,7 @@ jobs:
             release/*
 
       # =====================================================
-      # 13. GitHub Release
+      # 14. GitHub Release
       # =====================================================
 
       - name: Create GitHub Release
