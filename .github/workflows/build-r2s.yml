@@ -33,17 +33,18 @@ jobs:
       # =====================================================
       # 1. 安装编译依赖
       #
-      # ImmortalWrt 25.12
+      # ImmortalWrt 25.12.1
       # Ubuntu 22.04
       # =====================================================
 
       - name: Install build dependencies
-
         env:
           DEBIAN_FRONTEND: noninteractive
-
         run: |
+          set -e
+
           sudo apt-get update -y
+
           sudo apt-get install -y \
             ack-grep \
             antlr3 \
@@ -122,11 +123,12 @@ jobs:
             xxd \
             zlib1g-dev \
             zstd
-          # Ubuntu22.04兼容
-          # ImmortalWrt 构建环境需要 ack
+
+          # Ubuntu 22.04 / ImmortalWrt 构建环境兼容
           sudo ln -sf \
             /usr/bin/ack-grep \
             /usr/local/bin/ack
+
           sudo apt-get clean
 
       # =====================================================
@@ -134,8 +136,9 @@ jobs:
       # =====================================================
 
       - name: Clone ImmortalWrt v25.12.1
-
         run: |
+          set -e
+
           git clone \
             -b v25.12.1 \
             --single-branch \
@@ -148,42 +151,62 @@ jobs:
       # =====================================================
 
       - name: Update feeds
-
         run: |
+          set -e
+
           cd immortalwrt
-          echo "===== DEBUG PATH ====="
+
+          echo "===== WORKING DIRECTORY ====="
           pwd
 
-          echo "===== LIST DEVICE ====="
+          echo "===== R2S DEVICE FILES ====="
           ls -la ../device/r2s/
 
-          echo "===== CHMOD TEST ====="
+          echo "===== RUN Diy-Part1 ====="
           chmod +x ../device/r2s/Diy-Part1.sh
-
           ../device/r2s/Diy-Part1.sh
+
+          echo "===== UPDATE FEEDS ====="
           ./scripts/feeds update -a
+
+          echo "===== INSTALL FEEDS ====="
           ./scripts/feeds install -a
 
-      - name: Debug feeds state
+      # -----------------------------------------------------
+      # 3.1 检查 feeds
+      # -----------------------------------------------------
 
+      - name: Verify feeds
         run: |
+          set -e
+
           cd immortalwrt
-          echo "===== feeds.conf ====="
+
+          echo "===== feeds.conf.default ====="
           cat feeds.conf.default
 
-          echo "===== repositories before build ====="
-          find . -name "*distfeeds*" -o -name "*repositories*"
-
-          echo "===== nikki feed ====="
+          echo "===== NIKKI FEED ====="
           test -d feeds/nikki \
-            || { echo "ERROR: nikki feed missing"; exit 1; }
+            || {
+              echo "ERROR: nikki feed missing"
+              exit 1
+            }
+
+          echo "===== FEEDS ====="
+          ls -la feeds
+
+      # -----------------------------------------------------
+      # 3.2 保存 feeds 配置
+      # -----------------------------------------------------
 
       - name: Save feeds state
-
         run: |
+          set -e
+
           cd immortalwrt
-          echo "===== Save feeds configuration ====="
+
           cp feeds.conf.default ../YAIF-feeds.conf
+
           ls -lh ../YAIF-feeds.conf
 
       # =====================================================
@@ -191,28 +214,40 @@ jobs:
       # =====================================================
 
       - name: Inject files
-
         run: |
+          set -e
+
           cd immortalwrt
+
           chmod +x ../device/r2s/Diy-Part2.sh
           ../device/r2s/Diy-Part2.sh
 
+      # -----------------------------------------------------
+      # 4.1 验证 APK 文件
+      # -----------------------------------------------------
+
       - name: Verify injected files
         run: |
+          set -e
+
           cd immortalwrt
 
-          echo "===== Injected APK files ====="
+          echo "===== INJECTED APK FILES ====="
           find files/etc/apk -type f 2>/dev/null || true
 
-          echo "===== APK repository content ====="
+          echo "===== APK REPOSITORIES ====="
+
           if [ -d files/etc/apk/repositories.d ]; then
+
               for f in files/etc/apk/repositories.d/*
               do
                   [ -f "$f" ] || continue
+
                   echo "----------"
-                  echo $f
-                  cat $f
+                  echo "$f"
+                  cat "$f"
               done
+
           else
               echo "ERROR: files/etc/apk/repositories.d missing"
               exit 1
@@ -221,116 +256,277 @@ jobs:
       # =====================================================
       # 5. 应用 config.seed
       #
-      # 唯一配置入口
+      # 唯一配置入口：
       #
       # config.seed
-      #       |
-      #       v
-      # make defconfig
-      #       |
-      #       v
+      #      ↓
       # .config
-      #
+      #      ↓
+      # make defconfig
+      #      ↓
+      # 最终 .config
       # =====================================================
 
       - name: Apply R2S config.seed
-
         run: |
+          set -e
+
           cd immortalwrt
+
+          test -f ../device/r2s/config.seed \
+            || {
+              echo "ERROR: config.seed missing"
+              exit 1
+            }
+
           cp ../device/r2s/config.seed .config
+
           make defconfig
 
-      # =====================================================
-      # 5.1 调试 APK repository 生成逻辑
-      # =====================================================
-      - name: Trace APK repository generation
+          test -f .config
 
+      # =====================================================
+      # 5.1 验证核心配置
+      # =====================================================
+
+      - name: Verify core configuration
         run: |
+          set -e
+
           cd immortalwrt
-          echo "===== Search distfeeds generators ====="
-          grep -R "distfeeds" . 2>/dev/null || true
+
+          echo "===== TARGET ====="
+          grep -E \
+            '^CONFIG_TARGET_(rockchip|rockchip_armv8|rockchip_armv8_DEVICE_friendlyarm_nanopi-r2s)=' \
+            .config
+
+          echo "===== APK ====="
+          grep '^CONFIG_USE_APK=' .config
+
+          echo "===== BPF ====="
+          grep -E \
+            '^(CONFIG_KERNEL_BPF|CONFIG_KERNEL_BPF_SYSCALL|CONFIG_KERNEL_BPF_JIT|CONFIG_KERNEL_DEBUG_INFO_BTF|CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES)=' \
+            .config
+
+          echo "===== BPFTool ====="
+          grep '^CONFIG_PACKAGE_bpftool-full=' .config
+
+          echo "===== NIKKI / MIHOMO ====="
+          grep -E \
+            '^CONFIG_PACKAGE_(nikki|mihomo-meta)=' \
+            .config
+
+          echo "===== DAED ====="
+          grep -E \
+            '^CONFIG_PACKAGE_(daed|luci-app-daed|daed-geoip|daed-geosite)=' \
+            .config
+
+          echo "===== CORE CONFIGURATION VERIFIED ====="
 
       # =====================================================
-      # 5.2 APK runtime 检查
-      #
-      # 验证 ImmortalWrt 25.12 APK 配置生成链
-      #
-      # config.seed
-      #       |
-      #       v
-      # make defconfig
-      #       |
-      #       v
-      # .config
-      #       |
-      #       v
-      # APK runtime
-      #
+      # 5.2 APK runtime / repository 生成链检查
       # =====================================================
 
       - name: Check APK runtime state
         run: |
-          cd immortalwrt
-          echo "===== APK CONFIG ====="
-          grep CONFIG_USE_APK .config || true
+          set -e
 
-          echo "===== APK directories ====="
+          cd immortalwrt
+
+          echo "===== APK CONFIG ====="
+          grep '^CONFIG_USE_APK=' .config
+
+          echo "===== APK DIRECTORIES ====="
           find . -maxdepth 5 -path "*apk*" 2>/dev/null | head -50
 
-          echo "===== repositories template ====="
-          find . \( -name "repositories*" -o -name "*distfeeds*" \) 2>/dev/null
+          echo "===== REPOSITORY TEMPLATES ====="
+          find . \
+            \( -name "repositories*" -o -name "*distfeeds*" \) \
+            2>/dev/null
 
-          echo "===== package manager files ====="
-          ls -la package/base-files/files/etc/apk 2>/dev/null || true
+          echo "===== BASE-FILES APK ====="
+          ls -la \
+            package/base-files/files/etc/apk \
+            2>/dev/null || true
 
-          echo "===== target apk scripts ====="
+          echo "===== REPOSITORIES.D REFERENCES ====="
           grep -R "repositories.d" . 2>/dev/null || true
 
       # =====================================================
-      # 6.2 禁止旧代理组件
+      # 5.3 禁止旧代理组件
       #
-      # 防止配置漂移
-      #
+      # mihomo-alpha 与 mihomo-meta 存在冲突风险。
+      # 当前 YAIF 只允许 mihomo-meta。
       # =====================================================
+
       - name: Check forbidden packages
         run: |
+          set -e
+
           cd immortalwrt
 
-          echo "===== Checking forbidden packages ====="
+          echo "===== CHECK FORBIDDEN PACKAGES ====="
 
-          if grep -q "^CONFIG_PACKAGE_mihomo-alpha=y" .config
+          if grep -q '^CONFIG_PACKAGE_mihomo-alpha=y' .config
           then
               echo "ERROR: mihomo-alpha enabled"
               exit 1
           fi
 
-          if grep -q "^CONFIG_PACKAGE_mihomo-alpha=" .config
+          if grep -q '^CONFIG_PACKAGE_mihomo-alpha=' .config
           then
-              echo "WARNING: mihomo-alpha found"
-              grep "mihomo-alpha" .config
+              echo "WARNING: mihomo-alpha symbol exists:"
+              grep '^CONFIG_PACKAGE_mihomo-alpha=' .config
           fi
 
           echo "Forbidden packages clean"
 
       # =====================================================
-      # 7. 保存最终配置
+      # 5.4 验证 config.seed 与最终 .config
+      #
+      # 规则：
+      #
+      # CONFIG_PACKAGE_xxx=y
+      #     → 最终必须保持 =y
+      #
+      # # CONFIG_PACKAGE_xxx is not set
+      #     → 最终不能出现 CONFIG_PACKAGE_xxx=...
+      #
+      # seed 中不存在于当前 Kconfig 的 symbol：
+      #     → 只提示 INFO，不阻断构建
+      #
+      # 这样可以识别：
+      #   - seed 中明确要求的包被 Kconfig 丢弃
+      #   - 明确禁用项被依赖重新启用
+      #   - 已从 25.12 删除的旧 package symbol
       # =====================================================
-      - name: Save final config
-        run: |
-          ls -lh immortalwrt/.config
-          test -f immortalwrt/.config
-          cp immortalwrt/.config YAIF-R2S-final.config
-          cp immortalwrt/feeds.conf.default YAIF-feeds-runtime.conf
-          tar czf YAIF-feeds-runtime-dir.tar.gz immortalwrt/feeds
-          ls -lh YAIF-R2S-final.config
-          ls -lh YAIF-feeds-runtime.conf
-          ls -lh YAIF-feeds-runtime-dir.tar.gz
 
-      - name: Upload final config
+      - name: Verify config.seed
+        run: |
+          set -e
+
+          cd immortalwrt
+
+          echo "=========================================="
+          echo "1. VERIFY EXPLICITLY ENABLED PACKAGES"
+          echo "=========================================="
+
+          while read -r pkg; do
+
+              if ! grep -q "^${pkg}=y$" .config
+              then
+                  echo "ERROR: 最终配置缺失: ${pkg}"
+                  exit 1
+              fi
+
+          done < <(
+              grep '^CONFIG_PACKAGE_.*=y$' \
+                ../device/r2s/config.seed |
+              cut -d= -f1
+          )
+
+          echo "OK: all explicitly enabled packages preserved"
+
+          echo
+          echo "=========================================="
+          echo "2. VERIFY EXPLICITLY DISABLED PACKAGES"
+          echo "=========================================="
+
+          while read -r pkg; do
+
+              if grep -q "^${pkg}=" .config
+              then
+                  echo "ERROR: 被重新启用: ${pkg}"
+                  exit 1
+              fi
+
+          done < <(
+              grep '^# CONFIG_PACKAGE_.* is not set$' \
+                ../device/r2s/config.seed |
+              sed -E \
+                's/^# (CONFIG_PACKAGE_[^ ]+) is not set$/\1/'
+          )
+
+          echo "OK: all explicitly disabled packages remain disabled"
+
+          echo
+          echo "=========================================="
+          echo "3. VERIFY PACKAGE SYMBOL EXISTENCE"
+          echo "=========================================="
+
+          while read -r pkg; do
+
+              if ! grep -Eq \
+                "^(# )?${pkg}(=| is not set)" \
+                .config
+              then
+                  echo "INFO: seed symbol not present in final Kconfig: ${pkg}"
+              fi
+
+          done < <(
+              grep -E \
+                '^(# )?CONFIG_PACKAGE_[^ =]+' \
+                ../device/r2s/config.seed |
+              sed -E \
+                's/^# //; s/=.*//; s/ is not set.*//' |
+              sort -u
+          )
+
+          echo
+          echo "=========================================="
+          echo "4. VERIFY BPF TOOL"
+          echo "=========================================="
+
+          grep -q '^CONFIG_PACKAGE_bpftool-full=y$' .config \
+            || {
+              echo "ERROR: bpftool-full is not enabled"
+              exit 1
+            }
+
+          echo "OK: bpftool-full enabled"
+
+          echo
+          echo "=========================================="
+          echo "config.seed verification completed"
+          echo "=========================================="
+
+      # =====================================================
+      # 6. 保存最终配置 / feeds 状态
+      # =====================================================
+
+      - name: Save final build state
+        run: |
+          set -e
+
+          test -f immortalwrt/.config
+
+          cp immortalwrt/.config \
+            YAIF-R2S-final.config
+
+          cp immortalwrt/feeds.conf.default \
+            YAIF-feeds-runtime.conf
+
+          tar czf \
+            YAIF-feeds-runtime-dir.tar.gz \
+            immortalwrt/feeds
+
+          echo "===== BUILD STATE ====="
+
+          ls -lh \
+            YAIF-R2S-final.config \
+            YAIF-feeds-runtime.conf \
+            YAIF-feeds-runtime-dir.tar.gz
+
+      # =====================================================
+      # 6.1 上传构建状态
+      # =====================================================
+
+      - name: Upload build state
         uses: actions/upload-artifact@v4
         with:
           name: YAIF-R2S-build-state
           retention-days: 90
+
           path: |
             YAIF-R2S-final.config
             YAIF-feeds-runtime.conf
@@ -338,16 +534,21 @@ jobs:
             device/r2s/config.seed
 
       # =====================================================
-      # 8. 下载源码包
+      # 7. 下载源码包
       # =====================================================
+
       - name: Download sources
         run: |
+          set -e
+
           cd immortalwrt
+
           make download -j$(nproc) V=s
 
       # =====================================================
-      # 9. SSH 调试
+      # 8. SSH 调试
       # =====================================================
+
       - name: SSH debug
         if: ${{ inputs.ssh == true }}
         uses: mxschmitt/action-tmate@v3
@@ -355,31 +556,48 @@ jobs:
           limit-access-to-actor: false
 
       # =====================================================
-      # 10. 编译固件
+      # 9. 编译固件
+      #
+      # 首先并行编译。
+      #
+      # 如果失败：
+      #   自动回退到单线程。
+      #
+      # 只有单线程也失败时才让 workflow 失败。
       # =====================================================
+
       - name: Build firmware
         run: |
           set -e
+
           cd immortalwrt
 
-          echo "==> Start firmware build"
+          echo "=========================================="
+          echo "START FIRMWARE BUILD"
+          echo "=========================================="
 
-          if make -j$(nproc) V=s; then
-
-              echo "==> Build completed"
-
+          if make -j$(nproc) V=s
+          then
+              echo "=========================================="
+              echo "PARALLEL BUILD COMPLETED"
+              echo "=========================================="
           else
-
-              echo "==> Parallel build failed"
-              echo "==> Falling back to single thread"
+              echo "=========================================="
+              echo "PARALLEL BUILD FAILED"
+              echo "FALLBACK TO SINGLE THREAD"
+              echo "=========================================="
 
               make -j1 V=s
 
+              echo "=========================================="
+              echo "SINGLE THREAD BUILD COMPLETED"
+              echo "=========================================="
           fi
 
       # =====================================================
-      # 11. 整理固件
+      # 10. 整理固件
       # =====================================================
+
       - name: Prepare firmware files
         run: |
           set -e
@@ -388,47 +606,70 @@ jobs:
 
           TARGET_DIR="immortalwrt/bin/targets/rockchip/armv8"
 
-          echo "==> Copy sysupgrade images"
+          echo "===== TARGET DIRECTORY ====="
+          ls -lah "${TARGET_DIR}"
 
-          cp ${TARGET_DIR}/*sysupgrade.img.gz release/
+          echo "===== COPY SYSUPGRADE IMAGES ====="
 
-          cp ${TARGET_DIR}/sha256sums release/
-          cp ${TARGET_DIR}/config.buildinfo release/
-          cp ${TARGET_DIR}/*.manifest release/
+          cp \
+            "${TARGET_DIR}"/*sysupgrade.img.gz \
+            release/
 
-          cp immortalwrt/.config release/YAIF-R2S.config
+          cp \
+            "${TARGET_DIR}/sha256sums" \
+            release/
 
-          echo "sysupgrade count:"
-          ls ${TARGET_DIR}/*sysupgrade.img.gz | wc -l
+          cp \
+            "${TARGET_DIR}/config.buildinfo" \
+            release/
 
-          echo "==> Release files:"
+          cp \
+            "${TARGET_DIR}"/*.manifest \
+            release/
+
+          cp \
+            immortalwrt/.config \
+            release/YAIF-R2S.config
+
+          echo "===== SYSUPGRADE COUNT ====="
+
+          ls \
+            "${TARGET_DIR}"/*sysupgrade.img.gz |
+            wc -l
+
+          echo "===== RELEASE FILES ====="
+
           ls -lh release
 
-          test -n "$(ls release/*sysupgrade.img.gz 2>/dev/null)" || {
+          test -n \
+            "$(ls release/*sysupgrade.img.gz 2>/dev/null)" \
+            || {
               echo "ERROR: sysupgrade image missing"
               exit 1
-          }
+            }
 
       # =====================================================
-      # 12. 上传固件
+      # 11. 上传固件 Artifact
       # =====================================================
+
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
           name: YAIF-25.12.1-R2S-${{ github.run_number }}
           retention-days: 90
-
           if-no-files-found: error
 
           path: |
             release/*
 
       # =====================================================
-      # 13. Release
+      # 12. GitHub Release
       # =====================================================
+
       - name: Create GitHub Release
         if: ${{ inputs.release == true }}
         uses: softprops/action-gh-release@v2
+
         with:
           tag_name: YAIF-25.12.1-R2S-build-${{ github.run_id }}
 
