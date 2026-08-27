@@ -316,23 +316,33 @@ jobs:
       # =====================================================
       # 6.1 验证 config.seed
       #
-      # 验证原则：
+      # config.seed 是人工维护的配置入口。
       #
-      # 1. seed 中明确 =y 的普通 PACKAGE：
-      #      最终 .config 必须保持 =y
+      # make defconfig 后：
       #
-      # 2. Kconfig / target 默认包：
-      #      允许从 CONFIG_PACKAGE_xxx
-      #      转换为 CONFIG_DEFAULT_xxx
+      #   config.seed
+      #        ↓
+      #   Kconfig 解析
+      #        ↓
+      #   .config
       #
-      # 3. builtin kernel capability：
-      #      不要求存在对应 CONFIG_PACKAGE_xxx
+      # 最终 .config 不要求与 seed 逐字一致。
       #
-      # 4. seed 中明确 disabled 的 PACKAGE：
-      #      不允许最终重新启用
+      # 允许：
       #
-      # 5. 不强制要求所有 seed PACKAGE symbol
-      #    在最终 .config 中逐字存在。
+      #   CONFIG_PACKAGE_xxx=y
+      #       ↓
+      #   CONFIG_DEFAULT_xxx=y
+      #
+      # 以及 Kconfig 产生的正常依赖 / builtin。
+      #
+      # 但：
+      #
+      #   seed 明确禁用的 PACKAGE
+      #       ↓
+      #   不允许最终重新启用
+      #
+      # 核心 YAIF 软件包和关键内核能力仍严格检查。
       # =====================================================
 
       - name: Verify config.seed
@@ -350,33 +360,53 @@ jobs:
 
           while read -r pkg
           do
-              # -------------------------------------------------
-              # 直接存在于最终 .config
-              # -------------------------------------------------
+              # ------------------------------------------
+              # 直接 PACKAGE=y
+              # ------------------------------------------
               if grep -q "^${pkg}=y$" "$FINAL"; then
+
                   echo "OK: ${pkg}=y"
                   continue
+
               fi
 
-              # -------------------------------------------------
-              # Kconfig DEFAULT_* 转换
+              # ------------------------------------------
+              # PACKAGE=y → DEFAULT=y
               #
               # 例如：
+              #
               # CONFIG_PACKAGE_autocore=y
-              # ->
+              #
+              # 最终：
+              #
               # CONFIG_DEFAULT_autocore=y
-              # -------------------------------------------------
+              # ------------------------------------------
               default_pkg="${pkg/CONFIG_PACKAGE_/CONFIG_DEFAULT_}"
 
               if grep -q "^${default_pkg}=y$" "$FINAL"; then
-                  echo "OK: ${pkg}=y -> ${default_pkg}=y"
+
+                  echo "OK: ${pkg} -> ${default_pkg}=y"
                   continue
+
               fi
 
-              # -------------------------------------------------
-              # 其余情况才是真正缺失
-              # -------------------------------------------------
-              echo "ERROR: 最终配置缺失: ${pkg}"
+              # ------------------------------------------
+              # 未找到明确 PACKAGE / DEFAULT
+              # ------------------------------------------
+
+              echo "ERROR: 最终配置无法确认: ${pkg}"
+              echo
+              echo "Seed:"
+              grep "^${pkg}=" "$SEED" || true
+
+              echo
+              echo "Final PACKAGE:"
+              grep "^${pkg}=" "$FINAL" || true
+
+              echo
+              echo "Final DEFAULT:"
+              grep "^${default_pkg}=" "$FINAL" || true
+
               exit 1
 
           done < <(
@@ -385,15 +415,19 @@ jobs:
           )
 
 
+          echo
           echo "=========================================="
           echo "2. Verify explicitly disabled packages"
           echo "=========================================="
 
           while read -r pkg
           do
-              if grep -q "^${pkg}=" "$FINAL"; then
+
+              if grep -q "^${pkg}=y$" "$FINAL"; then
+
                   echo "ERROR: 被重新启用: ${pkg}"
                   grep "^${pkg}=" "$FINAL"
+
                   exit 1
               fi
 
@@ -405,8 +439,40 @@ jobs:
           )
 
 
+          echo
           echo "=========================================="
-          echo "3. Verify critical YAIF packages"
+          echo "3. Verify forbidden packages"
+          echo "=========================================="
+
+          FORBIDDEN_PACKAGES="
+          CONFIG_PACKAGE_mihomo-alpha
+          CONFIG_PACKAGE_luci-app-attendedsysupgrade
+          CONFIG_PACKAGE_luci-i18n-attendedsysupgrade-zh-cn
+          CONFIG_PACKAGE_arptables-legacy
+          CONFIG_PACKAGE_ebtables-legacy
+          CONFIG_PACKAGE_ip6tables-legacy
+          CONFIG_PACKAGE_iptables-legacy
+          CONFIG_PACKAGE_xtables-legacy
+          CONFIG_PACKAGE_miniupnpd-iptables
+          "
+
+          for pkg in $FORBIDDEN_PACKAGES
+          do
+              if grep -q "^${pkg}=y$" "$FINAL"; then
+
+                  echo "ERROR: forbidden package enabled: ${pkg}"
+                  grep "^${pkg}=" "$FINAL"
+
+                  exit 1
+              fi
+
+              echo "OK: ${pkg} not enabled"
+          done
+
+
+          echo
+          echo "=========================================="
+          echo "4. Verify critical YAIF packages"
           echo "=========================================="
 
           REQUIRED_PACKAGES="
@@ -421,17 +487,20 @@ jobs:
 
           for pkg in $REQUIRED_PACKAGES
           do
+
               grep -q "^${pkg}=y$" "$FINAL" || {
                   echo "ERROR: critical package missing: ${pkg}"
                   exit 1
               }
 
               echo "OK: ${pkg}=y"
+
           done
 
 
+          echo
           echo "=========================================="
-          echo "4. Verify important kernel capabilities"
+          echo "5. Verify important kernel capabilities"
           echo "=========================================="
 
           REQUIRED_KERNEL_CONFIGS="
@@ -445,6 +514,7 @@ jobs:
 
           while read -r cfg
           do
+
               grep -q "^${cfg}$" "$FINAL" || {
                   echo "ERROR: kernel capability missing: ${cfg}"
                   exit 1
@@ -457,23 +527,72 @@ jobs:
           )
 
 
+          echo
           echo "=========================================="
-          echo "5. Verify known builtin capabilities"
+          echo "6. Verify target"
           echo "=========================================="
 
-          # bridge 在 R2S / Linux 6.12 当前配置中可以 builtin。
-          # 因此不检查 CONFIG_PACKAGE_kmod-bridge。
-          #
-          # 实际运行时通过：
-          #   modinfo bridge
-          #   ip -d link show type bridge
-          #
-          # 进行验证。
+          REQUIRED_TARGET_CONFIGS="
+          CONFIG_TARGET_rockchip=y
+          CONFIG_TARGET_rockchip_armv8=y
+          CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r2s=y
+          "
 
-          echo "OK: bridge package symbol not required"
-          echo "OK: builtin kernel capability is excluded from package check"
+          while read -r cfg
+          do
+
+              grep -q "^${cfg}$" "$FINAL" || {
+                  echo "ERROR: target configuration missing: ${cfg}"
+                  exit 1
+              }
+
+              echo "OK: ${cfg}"
+
+          done < <(
+              printf '%s\n' "$REQUIRED_TARGET_CONFIGS"
+          )
 
 
+          echo
+          echo "=========================================="
+          echo "7. Verify filesystem formats"
+          echo "=========================================="
+
+          REQUIRED_IMAGE_CONFIGS="
+          CONFIG_TARGET_ROOTFS_SQUASHFS=y
+          CONFIG_TARGET_ROOTFS_EXT4FS=y
+          CONFIG_TARGET_IMAGES_GZIP=y
+          "
+
+          while read -r cfg
+          do
+
+              grep -q "^${cfg}$" "$FINAL" || {
+                  echo "ERROR: image configuration missing: ${cfg}"
+                  exit 1
+              }
+
+              echo "OK: ${cfg}"
+
+          done < <(
+              printf '%s\n' "$REQUIRED_IMAGE_CONFIGS"
+          )
+
+
+          echo
+          echo "=========================================="
+          echo "8. Verify APK"
+          echo "=========================================="
+
+          grep -q "^CONFIG_USE_APK=y$" "$FINAL" || {
+              echo "ERROR: CONFIG_USE_APK=y missing"
+              exit 1
+          }
+
+          echo "OK: CONFIG_USE_APK=y"
+
+
+          echo
           echo "=========================================="
           echo "config.seed verification completed"
           echo "=========================================="
