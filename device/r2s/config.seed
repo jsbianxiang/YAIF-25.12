@@ -327,9 +327,6 @@ CONFIG_PACKAGE_luci-i18n-vlmcsd-zh-cn=y
 # 本固件采用自维护编译与升级流程，不使用 ASU。
 # =========================================================
 
-# CONFIG_PACKAGE_luci-app-attendedsysupgrade is not set
-# CONFIG_PACKAGE_luci-i18n-attendedsysupgrade-zh-cn is not set
-
 
 # =========================================================
 # 14. DNS
@@ -359,23 +356,18 @@ CONFIG_PACKAGE_dnsmasq_full_ipset=y
 
 # ARP → nft。
 CONFIG_PACKAGE_arptables-nft=y
-# CONFIG_PACKAGE_arptables-legacy is not set
 
 # ebtables → nft。
 CONFIG_PACKAGE_ebtables-nft=y
-# CONFIG_PACKAGE_ebtables-legacy is not set
 
 # ip6tables → nft。
 CONFIG_PACKAGE_ip6tables-nft=y
-# CONFIG_PACKAGE_ip6tables-legacy is not set
 
 # xtables → nft。
 CONFIG_PACKAGE_xtables-nft=y
-# CONFIG_PACKAGE_xtables-legacy is not set
 
 # iptables → nft。
 CONFIG_PACKAGE_iptables-nft=y
-# CONFIG_PACKAGE_iptables-legacy is not set
 
 # iptables 兼容模块。
 CONFIG_PACKAGE_iptables-mod-conntrack-extra=y
@@ -495,6 +487,7 @@ CONFIG_DAED_USE_KERNEL_BTF=y
 # Host 端 BPF toolchain。
 CONFIG_BPF_TOOLCHAIN_HOST=y
 
+CONFIG_PACKAGE_bpftool-full=y
 
 # -------------------------
 # BPF Core
@@ -565,7 +558,6 @@ CONFIG_KERNEL_XDP_SOCKETS=y
 # BPF Diagnostics
 # -------------------------
 
-CONFIG_PACKAGE_bpftool=y
 CONFIG_PACKAGE_kmod-xdp-sockets-diag=y
 
 
@@ -613,14 +605,6 @@ CONFIG_PACKAGE_zram-swap=y
 CONFIG_PACKAGE_kmod-lib-lz4=y
 CONFIG_PACKAGE_kmod-lib-lzo=y
 CONFIG_PACKAGE_kmod-lib-zstd=y
-
-
-# =========================================================
-# 27. Network Device / Bridge
-# =========================================================
-
-CONFIG_PACKAGE_kmod-bridge=y
-
 
 # =========================================================
 # 28. WireGuard
