@@ -340,10 +340,10 @@ CONFIG_PACKAGE_luci-i18n-filebrowser-zh-cn=y
 CONFIG_PACKAGE_luci-app-ramfree=y
 CONFIG_PACKAGE_luci-i18n-ramfree-zh-cn=y
 
-# Tailscale Community。
+# Tailscale Community。不启用
 
-CONFIG_PACKAGE_luci-app-tailscale-community=y
-CONFIG_PACKAGE_luci-i18n-tailscale-community-zh-cn=y
+# CONFIG_PACKAGE_luci-app-tailscale-community=y
+# CONFIG_PACKAGE_luci-i18n-tailscale-community-zh-cn=y
 
 # ttyd。
 
@@ -355,10 +355,10 @@ CONFIG_PACKAGE_luci-i18n-ttyd-zh-cn=y
 CONFIG_PACKAGE_luci-app-upnp=y
 CONFIG_PACKAGE_luci-i18n-upnp-zh-cn=y
 
-# VLMCSd。
+# VLMCSd。不启用
 
-CONFIG_PACKAGE_luci-app-vlmcsd=y
-CONFIG_PACKAGE_luci-i18n-vlmcsd-zh-cn=y
+# CONFIG_PACKAGE_luci-app-vlmcsd=y
+# CONFIG_PACKAGE_luci-i18n-vlmcsd-zh-cn=y
 
 # LuCI 基础中文。
 
@@ -410,11 +410,11 @@ CONFIG_PACKAGE_ddns-scripts-dnspod=y
 CONFIG_PACKAGE_ddns-scripts-services=y
 CONFIG_PACKAGE_ddns-scripts-aliyun=y
 
-# FRPC 客户端。
+# FRPC 客户端。 不启用
 
-CONFIG_PACKAGE_frpc=y
-CONFIG_PACKAGE_luci-app-frpc=y
-CONFIG_PACKAGE_luci-i18n-frpc-zh-cn=y
+# CONFIG_PACKAGE_frpc=y
+# CONFIG_PACKAGE_luci-app-frpc=y
+# CONFIG_PACKAGE_luci-i18n-frpc-zh-cn=y
 
 # ZeroTier。
 
