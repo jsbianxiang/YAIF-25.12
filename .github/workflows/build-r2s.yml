@@ -8,7 +8,6 @@ on:
         required: false
         type: boolean
         default: false
-
       release:
         description: "发布 GitHub Release"
         required: false
@@ -18,525 +17,566 @@ on:
 permissions:
   contents: write
 
+env:
+  IMMORTALWRT_VERSION: "25.12.1"
+  IMMORTALWRT_REPO: "https://github.com/immortalwrt/immortalwrt"
+  TARGET_DIR: "immortalwrt/bin/targets/rockchip/armv8"
+  CONFIG_SEED: "device/r2s/config.seed"
+
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
-      # =====================================================
-      # 0. 获取 YAIF 仓库
-      # =====================================================
-
       - name: Checkout YAIF
         uses: actions/checkout@v4
-
-      # =====================================================
-      # 1. 安装编译依赖
-      #
-      # ImmortalWrt 25.12.1
-      # Ubuntu 22.04
-      # =====================================================
 
       - name: Install build dependencies
         env:
           DEBIAN_FRONTEND: noninteractive
-
         run: |
-          set -e
-
+          set -euo pipefail
           sudo apt-get update -y
-
           sudo apt-get install -y \
-            ack-grep \
-            antlr3 \
-            asciidoc \
-            autoconf \
-            automake \
-            autopoint \
-            binutils \
-            bison \
-            build-essential \
-            bzip2 \
-            ccache \
-            clang \
-            cmake \
-            cpio \
-            curl \
-            device-tree-compiler \
-            ecj \
-            fastjar \
-            flex \
-            gawk \
-            gettext \
-            gcc-multilib \
-            g++-multilib \
-            git \
-            gnutls-dev \
-            gperf \
-            haveged \
-            help2man \
-            intltool \
-            lib32gcc-s1 \
-            libc6-dev-i386 \
-            libelf-dev \
-            libglib2.0-dev \
-            libgmp3-dev \
-            libltdl-dev \
-            libmpc-dev \
-            libmpfr-dev \
-            libncurses-dev \
-            libpython3-dev \
-            libreadline-dev \
-            libssl-dev \
-            libtool \
-            libyaml-dev \
-            libz-dev \
-            lld \
-            llvm \
-            lrzsz \
-            mkisofs \
-            msmtp \
-            nano \
-            ninja-build \
-            p7zip \
-            p7zip-full \
-            patch \
-            pkgconf \
-            python3 \
-            python3-pip \
-            python3-ply \
-            python3-docutils \
-            python3-pyelftools \
-            qemu-utils \
-            re2c \
-            rsync \
-            scons \
-            squashfs-tools \
-            subversion \
-            swig \
-            texinfo \
-            uglifyjs \
-            unzip \
-            upx-ucl \
-            vim \
-            wget \
-            xmlto \
-            xxd \
-            zlib1g-dev \
-            zstd
-
-          # Ubuntu 22.04 / ImmortalWrt ack 兼容
-          sudo ln -sf \
-            /usr/bin/ack-grep \
-            /usr/local/bin/ack
-
+            ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar file flex \
+            gawk gettext gcc-multilib g++-multilib git gnutls-dev gperf haveged help2man \
+            intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev \
+            libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev libreadline-dev \
+            libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano \
+            ninja-build p7zip p7zip-full patch perl pkgconf python3 python3-pip \
+            python3-setuptools python3-ply python3-docutils python3-pyelftools qemu-utils \
+            re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs unzip \
+            upx-ucl vim wget xmlto xxd zlib1g-dev zstd
           sudo apt-get clean
 
-      # =====================================================
-      # 2. 拉取 ImmortalWrt v25.12.1
-      # =====================================================
+      - name: Verify build environment
+        run: |
+          set -euo pipefail
+          echo "===== User ====="
+          id
+          if [ "$(id -u)" -eq 0 ]; then
+            echo "ERROR: Build must not run as root."
+            exit 1
+          fi
+          echo "===== Working directory ====="
+          pwd
+          case "$PWD" in
+            *" "*)
+              echo "ERROR: Working directory contains spaces."
+              exit 1
+              ;;
+          esac
+          echo "===== Filesystem ====="
+          findmnt -T "$PWD" -o TARGET,FSTYPE,OPTIONS
+          echo "===== Tool versions ====="
+          git --version
+          gcc --version | head -n 1
+          clang --version | head -n 1
+          python3 --version
+          make --version | head -n 1
+          echo "===== Disk ====="
+          df -h .
+          echo "===== CPU ====="
+          nproc
+
+      - name: Check build environment variables
+        run: |
+          set -euo pipefail
+          if [ -n "${SED:-}" ]; then
+            echo "ERROR: SED environment variable is set."
+            exit 1
+          fi
+          if [ -n "${GREP_OPTIONS:-}" ]; then
+            echo "ERROR: GREP_OPTIONS environment variable is set."
+            exit 1
+          fi
+          echo "Build environment variables: OK"
 
       - name: Clone ImmortalWrt v25.12.1
         run: |
-          set -e
-
+          set -euo pipefail
           git clone \
-            -b v25.12.1 \
+            -b "v${IMMORTALWRT_VERSION}" \
             --single-branch \
             --filter=blob:none \
-            https://github.com/immortalwrt/immortalwrt \
+            "${IMMORTALWRT_REPO}" \
             immortalwrt
-
-      # =====================================================
-      # 3. 更新 feeds
-      # =====================================================
+          cd immortalwrt
+          echo "===== ImmortalWrt revision ====="
+          git rev-parse HEAD
+          echo "===== ImmortalWrt tag ====="
+          git describe --tags --exact-match
 
       - name: Update feeds
         run: |
-          set -e
-
+          set -euo pipefail
           cd immortalwrt
-
-          echo "===== ImmortalWrt ====="
-          pwd
-
           echo "===== YAIF R2S device files ====="
           ls -la ../device/r2s/
-
+          test -f ../device/r2s/Diy-Part1.sh
           chmod +x ../device/r2s/Diy-Part1.sh
-
-          # 注入 Nikki feed / feeds 配置
           ../device/r2s/Diy-Part1.sh
-
           echo "===== feeds.conf.default ====="
           cat feeds.conf.default
-
           echo "===== Update feeds ====="
           ./scripts/feeds update -a
-
           echo "===== Install feeds ====="
           ./scripts/feeds install -a
 
-      # =====================================================
-      # 3.1 验证 feeds
-      # =====================================================
-
       - name: Verify feeds
         run: |
-          set -e
-
+          set -euo pipefail
           cd immortalwrt
-
           test -d feeds/nikki || {
-            echo "ERROR: Nikki feed missing"
+            echo "ERROR: Nikki feed missing."
             exit 1
           }
-
+          test -f feeds/nikki/Makefile || {
+            echo "ERROR: Nikki feed Makefile missing."
+            exit 1
+          }
+          git -C feeds/nikki rev-parse HEAD >/dev/null 2>&1 || {
+            echo "ERROR: Nikki feed is not a valid Git repository."
+            exit 1
+          }
           echo "Nikki feed: OK"
-
-      # =====================================================
-      # 3.2 保存 feeds 状态
-      # =====================================================
+          echo "===== Feed directories ====="
+          find feeds \
+            -mindepth 1 \
+            -maxdepth 1 \
+            -type d \
+            -print | sort
 
       - name: Save feeds state
         run: |
-          set -e
-
+          set -euo pipefail
           cd immortalwrt
-
           cp feeds.conf.default ../YAIF-feeds.conf
-
+          IMMORTALWRT_COMMIT="$(git rev-parse HEAD)"
+          NIKKI_COMMIT="$(git -C feeds/nikki rev-parse HEAD)"
+          cat > ../YAIF-source-revisions.txt <<EOF
+          YAIF Commit: ${GITHUB_SHA}
+          ImmortalWrt Version: ${IMMORTALWRT_VERSION}
+          ImmortalWrt Commit: ${IMMORTALWRT_COMMIT}
+          Nikki Feed Commit: ${NIKKI_COMMIT}
+          GitHub Run Number: ${GITHUB_RUN_NUMBER}
+          GitHub Run ID: ${GITHUB_RUN_ID}
+          Runner: ubuntu-24.04
+          EOF
           echo "===== YAIF feeds ====="
           cat ../YAIF-feeds.conf
-
-      # =====================================================
-      # 4. 注入 files
-      # =====================================================
+          echo "===== Source revisions ====="
+          cat ../YAIF-source-revisions.txt
 
       - name: Inject files
         run: |
-          set -e
-
+          set -euo pipefail
           cd immortalwrt
-
+          test -f ../device/r2s/Diy-Part2.sh
           chmod +x ../device/r2s/Diy-Part2.sh
-
           ../device/r2s/Diy-Part2.sh
-
-      # =====================================================
-      # 4.1 验证 APK repository
-      # =====================================================
 
       - name: Verify injected files
         run: |
-          set -e
-
+          set -euo pipefail
           cd immortalwrt
-
           echo "===== APK repository files ====="
-
           test -d files/etc/apk/repositories.d || {
-            echo "ERROR: files/etc/apk/repositories.d missing"
+            echo "ERROR: files/etc/apk/repositories.d missing."
             exit 1
           }
-
-          find files/etc/apk -type f -print
-
+          find files/etc/apk \
+            -type f \
+            -print | sort
           echo "===== Repository content ====="
-
           for f in files/etc/apk/repositories.d/*
           do
-              [ -f "$f" ] || continue
-
-              echo "---------- $f ----------"
-              cat "$f"
+            [ -f "$f" ] || continue
+            echo "---------- $f ----------"
+            cat "$f"
           done
-
-      # =====================================================
-      # 5. 应用 config.seed
-      #
-      # 唯一配置入口：
-      #
-      # config.seed
-      #      ↓
-      # .config
-      #      ↓
-      # make defconfig
-      #      ↓
-      # 最终 .config
-      # =====================================================
 
       - name: Apply R2S config.seed
         run: |
-          set -e
-
+          set -euo pipefail
           cd immortalwrt
-
-          test -f ../device/r2s/config.seed
-
-          cp ../device/r2s/config.seed .config
-
+          SEED="../${CONFIG_SEED}"
+          test -f "$SEED"
+          echo "===== Check duplicate CONFIG symbols ====="
+          DUPLICATES="$(
+            awk '
+              /^CONFIG_[^=[:space:]]+=/ {
+                print $1
+                next
+              }
+              /^# CONFIG_[^[:space:]]+ is not set$/ {
+                print $2
+              }
+            ' "$SEED" |
+            sort |
+            uniq -d
+          )"
+          if [ -n "$DUPLICATES" ]; then
+            echo "ERROR: duplicate CONFIG symbols found:"
+            echo "$DUPLICATES"
+            exit 1
+          fi
+          echo "No duplicate CONFIG symbols."
+          echo "===== Apply config.seed ====="
+          cp "$SEED" .config
           echo "===== make defconfig ====="
-
           make defconfig
 
-      # =====================================================
-      # 6. 禁止旧代理组件
-      # =====================================================
-
-      - name: Check forbidden packages
+      - name: Verify seed selections
         run: |
-          set -e
-
+          set -euo pipefail
           cd immortalwrt
+          echo "===== Verify seed selections ====="
+          FAILED=0
+          while IFS= read -r line
+          do
+            key="${line%%=*}"
+            expected="${line#*=}"
+            if ! grep -Fqx "${key}=${expected}" .config
+            then
+              echo "ERROR: seed selection was not preserved:"
+              echo "  ${line}"
+              echo "Actual:"
+              grep -E "^${key}=" .config || true
+              FAILED=1
+            fi
+          done < <(
+            grep -E '^CONFIG_[^=[:space:]]+=' "../${CONFIG_SEED}"
+          )
+          if [ "$FAILED" -ne 0 ]; then
+            echo "ERROR: one or more seed selections were changed or dropped by Kconfig."
+            exit 1
+          fi
+          echo "Seed selections: OK"
 
-          echo "===== Checking forbidden packages ====="
-
-          FORBIDDEN_PACKAGES="
+      - name: Check forbidden configurations
+        run: |
+          set -euo pipefail
+          cd immortalwrt
+          echo "===== Checking forbidden configurations ====="
+          FORBIDDEN_CONFIGS="
           CONFIG_PACKAGE_mihomo-alpha
           CONFIG_PACKAGE_luci-app-attendedsysupgrade
           CONFIG_PACKAGE_luci-i18n-attendedsysupgrade-zh-cn
+          CONFIG_PACKAGE_firewall
+          CONFIG_PACKAGE_miniupnpd-iptables
           CONFIG_PACKAGE_arptables-legacy
           CONFIG_PACKAGE_ebtables-legacy
           CONFIG_PACKAGE_ip6tables-legacy
           CONFIG_PACKAGE_iptables-legacy
           CONFIG_PACKAGE_xtables-legacy
+          CONFIG_PACKAGE_libopenssl-devcrypto
+          CONFIG_LUCI_CSSTIDY
+          CONFIG_LUCI_JSMIN
+          CONFIG_KERNEL_DEBUG_INFO_REDUCED
+          CONFIG_KERNEL_CC_OPTIMIZE_FOR_SIZE
           "
-
-          for pkg in $FORBIDDEN_PACKAGES
+          for cfg in $FORBIDDEN_CONFIGS
           do
-              if grep -q "^${pkg}=y$" .config; then
-                  echo "ERROR: forbidden package enabled: ${pkg}"
-                  exit 1
-              fi
+            if grep -Eq "^${cfg}=(y|m)$" .config
+            then
+              echo "ERROR: forbidden configuration selected:"
+              grep -E "^${cfg}=" .config
+              exit 1
+            fi
           done
+          echo "Forbidden configurations: OK"
 
-          echo "Forbidden packages: OK"
+      - name: Verify final configuration
+        run: |
+          set -euo pipefail
+          cd immortalwrt
+          check_config() {
+            local key="$1"
+            local expected="$2"
+            if ! grep -Fqx "${key}=${expected}" .config
+            then
+              echo "ERROR: ${key}=${expected} not found."
+              grep -E "^${key}=" .config || true
+              exit 1
+            fi
+            echo "OK: ${key}=${expected}"
+          }
+          echo "===== Build policy ====="
+          check_config CONFIG_USE_APK y
+          check_config CONFIG_ALL_KMODS y
+          check_config CONFIG_DEVEL y
+          check_config CONFIG_TOOLCHAINOPTS y
+          echo "===== Target ====="
+          check_config CONFIG_TARGET_rockchip y
+          check_config CONFIG_TARGET_rockchip_armv8 y
+          check_config \
+            CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_friendlyarm_nanopi-r2s \
+            y
+          echo "===== Firmware layout ====="
+          check_config CONFIG_TARGET_KERNEL_PARTSIZE 64
+          check_config CONFIG_TARGET_ROOTFS_PARTSIZE 1024
+          check_config CONFIG_TARGET_ROOTFS_SQUASHFS y
+          check_config CONFIG_TARGET_ROOTFS_EXT4FS y
+          check_config CONFIG_TARGET_IMAGES_GZIP y
+          echo "===== Global network ====="
+          check_config CONFIG_IPV6 y
+          echo "===== Nikki ====="
+          check_config CONFIG_PACKAGE_nikki y
+          check_config CONFIG_PACKAGE_luci-app-nikki y
+          check_config CONFIG_PACKAGE_luci-i18n-nikki-zh-cn y
+          echo "===== Daed ====="
+          check_config CONFIG_PACKAGE_daed y
+          check_config CONFIG_PACKAGE_luci-app-daed y
+          check_config CONFIG_PACKAGE_luci-i18n-daed-zh-cn y
+          echo "===== LuCI / Argon ====="
+          check_config CONFIG_PACKAGE_luci-ssl y
+          check_config CONFIG_PACKAGE_luci-theme-argon y
+          check_config CONFIG_PACKAGE_luci-app-argon-config y
+          check_config CONFIG_PACKAGE_luci-i18n-argon-config-zh-cn y
+          check_config CONFIG_PACKAGE_luci-theme-bootstrap y
+          check_config CONFIG_PACKAGE_luci-compat y
+          echo "===== TUN / TProxy ====="
+          check_config CONFIG_PACKAGE_kmod-tun y
+          check_config CONFIG_PACKAGE_kmod-dummy y
+          check_config CONFIG_PACKAGE_kmod-inet-diag y
+          check_config CONFIG_PACKAGE_kmod-nft-socket y
+          check_config CONFIG_PACKAGE_kmod-nft-tproxy y
+          echo "===== FullCone / Flow Offload ====="
+          check_config CONFIG_PACKAGE_kmod-nft-fullcone y
+          check_config CONFIG_PACKAGE_kmod-nft-offload y
+          echo "===== BPF / BTF ====="
+          check_config CONFIG_BPF_TOOLCHAIN_HOST y
+          check_config CONFIG_DWARVES y
+          check_config CONFIG_KERNEL_BPF_EVENTS y
+          check_config CONFIG_KERNEL_BPF_STREAM_PARSER y
+          check_config CONFIG_KERNEL_CGROUPS y
+          check_config CONFIG_KERNEL_KPROBES y
+          check_config CONFIG_KERNEL_NETKIT y
+          check_config CONFIG_KERNEL_XDP_SOCKETS y
+          check_config CONFIG_KERNEL_DEBUG_INFO y
+          check_config CONFIG_KERNEL_DEBUG_INFO_BTF y
+          check_config CONFIG_KERNEL_MODULE_ALLOW_BTF_MISMATCH y
+          echo "===== BPF packages ====="
+          check_config CONFIG_PACKAGE_kmod-xdp-sockets-diag y
+          check_config CONFIG_PACKAGE_kmod-sched-bpf y
+          echo "===== Derived kernel configuration ====="
+          check_config CONFIG_KERNEL_CGROUP_BPF y
+          check_config CONFIG_KERNEL_KPROBE_EVENTS y
+          check_config CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES y
+          echo "===== Derived Netfilter dependencies ====="
+          check_config CONFIG_PACKAGE_kmod-nf-conntrack y
+          check_config CONFIG_PACKAGE_kmod-nf-nat y
+          check_config CONFIG_PACKAGE_kmod-nft-nat y
+          check_config CONFIG_PACKAGE_kmod-nf-flow y
+          echo "===== Derived Crypto dependencies ====="
+          check_config CONFIG_PACKAGE_kmod-crypto-hash y
+          check_config CONFIG_PACKAGE_kmod-crypto-hmac y
+          check_config CONFIG_PACKAGE_kmod-crypto-manager y
+          check_config CONFIG_PACKAGE_kmod-crypto-aead y
+          check_config CONFIG_PACKAGE_kmod-crypto-null y
+          check_config CONFIG_PACKAGE_kmod-crypto-sha3 y
+          check_config CONFIG_PACKAGE_kmod-crypto-sha512 y
+          echo "===== BBR / ZRAM ====="
+          check_config CONFIG_PACKAGE_kmod-tcp-bbr y
+          check_config CONFIG_PACKAGE_zram-swap y
+          echo "Final configuration verification: OK"
 
-      # =====================================================
-      # 7. 保存最终配置
-      # =====================================================
+      - name: Generate final diffconfig
+        run: |
+          set -euo pipefail
+          cd immortalwrt
+          test -f scripts/diffconfig.sh
+          bash ./scripts/diffconfig.sh \
+            > ../YAIF-R2S-diffconfig
+          echo "===== YAIF-R2S-diffconfig ====="
+          cat ../YAIF-R2S-diffconfig
 
       - name: Save final build state
         run: |
-          set -e
-
+          set -euo pipefail
           test -f immortalwrt/.config
-
+          test -f YAIF-R2S-diffconfig
+          test -f YAIF-source-revisions.txt
+          test -f YAIF-feeds.conf
           cp immortalwrt/.config \
             YAIF-R2S-final.config
-
           cp immortalwrt/feeds.conf.default \
             YAIF-feeds-runtime.conf
-
           tar czf \
             YAIF-feeds-runtime-dir.tar.gz \
             -C immortalwrt \
             feeds
-
           echo "===== Build state ====="
-
           ls -lh \
             YAIF-R2S-final.config \
+            YAIF-R2S-diffconfig \
+            YAIF-source-revisions.txt \
+            YAIF-feeds.conf \
             YAIF-feeds-runtime.conf \
             YAIF-feeds-runtime-dir.tar.gz
 
-      # =====================================================
-      # 7.1 上传构建状态
-      # =====================================================
-
       - name: Upload build state
         uses: actions/upload-artifact@v4
-
         with:
           name: YAIF-R2S-build-state
           retention-days: 90
           if-no-files-found: error
-
           path: |
             YAIF-R2S-final.config
+            YAIF-R2S-diffconfig
+            YAIF-source-revisions.txt
+            YAIF-feeds.conf
             YAIF-feeds-runtime.conf
             YAIF-feeds-runtime-dir.tar.gz
             device/r2s/config.seed
 
-      # =====================================================
-      # 8. 下载源码包
-      #
-      # 正式全量编译前完成所有 source download。
-      # =====================================================
+      - name: SSH debug
+        if: ${{ inputs.ssh == true }}
+        uses: mxschmitt/action-tmate@v3.24
+        timeout-minutes: 30
+        with:
+          limit-access-to-actor: true
 
       - name: Download sources
         run: |
-          set -e
-
+          set -euo pipefail
           cd immortalwrt
-
           echo "=========================================="
           echo "Download all sources"
           echo "=========================================="
-
           make download \
-            -j$(nproc) \
+            -j"$(nproc)" \
             V=s
-
-      # =====================================================
-      # 9. SSH 调试
-      # =====================================================
-
-      - name: SSH debug
-        if: ${{ inputs.ssh == true }}
-
-        uses: mxschmitt/action-tmate@v3
-
-        with:
-          limit-access-to-actor: false
-
-      # =====================================================
-      # 10. 全量编译
-      # =====================================================
 
       - name: Build firmware
         run: |
-          set -e
-
+          set -euo pipefail
           cd immortalwrt
-
           echo "=========================================="
           echo "Start full firmware build"
           echo "=========================================="
-
           echo "CPU threads:"
           nproc
-
           make \
-            -j$(nproc) \
+            -j"$(nproc)" \
             V=s
-
           echo "=========================================="
           echo "Full firmware build completed"
           echo "=========================================="
 
-      # =====================================================
-      # 11. 验证固件产物
-      # =====================================================
-
       - name: Verify firmware output
         run: |
-          set -e
-
-          TARGET_DIR="immortalwrt/bin/targets/rockchip/armv8"
-
+          set -euo pipefail
+          TARGET_DIR="${{ env.TARGET_DIR }}"
           echo "===== Target directory ====="
-
           test -d "$TARGET_DIR"
-
           ls -lh "$TARGET_DIR"
-
-
-          echo "===== Sysupgrade images ====="
-
-          test -n "$(find "$TARGET_DIR" \
-            -maxdepth 1 \
-            -name '*sysupgrade.img.gz' \
-            -type f)"
-
-          ls -lh "$TARGET_DIR"/*sysupgrade.img.gz
-
-
-          echo "===== SHA256 ====="
-
+          echo "===== R2S squashfs image ====="
+          test -f \
+            "$TARGET_DIR/friendlyarm_nanopi-r2s-squashfs-sysupgrade.img.gz"
+          echo "===== R2S ext4 image ====="
+          test -f \
+            "$TARGET_DIR/friendlyarm_nanopi-r2s-ext4-sysupgrade.img.gz"
+          echo "===== SHA256 checksum ====="
           test -f "$TARGET_DIR/sha256sums"
-
-          sha256sum \
-            "$TARGET_DIR"/*sysupgrade.img.gz
-
-
+          (
+            cd "$TARGET_DIR"
+            sha256sum -c sha256sums
+          )
           echo "===== Build info ====="
-
           test -f "$TARGET_DIR/config.buildinfo"
-
-
+          echo "===== Feeds build info ====="
+          test -f "$TARGET_DIR/feeds.buildinfo"
           echo "===== Manifest ====="
-
-          ls "$TARGET_DIR"/*.manifest
-
-
+          MANIFEST_COUNT="$(
+            find "$TARGET_DIR" \
+              -maxdepth 1 \
+              -type f \
+              -name '*.manifest' |
+            wc -l
+          )"
+          test "$MANIFEST_COUNT" -ge 1
+          ls -lh "$TARGET_DIR"/*.manifest
+          echo "===== R2S sysupgrade images ====="
+          find "$TARGET_DIR" \
+            -maxdepth 1 \
+            -type f \
+            -name 'friendlyarm_nanopi-r2s-*-sysupgrade.img.gz' \
+            -print \
+            -exec ls -lh {} \;
           echo "Firmware output verification: OK"
-
-      # =====================================================
-      # 12. 整理固件
-      # =====================================================
 
       - name: Prepare firmware files
         run: |
-          set -e
-
+          set -euo pipefail
           mkdir -p release
-
-          TARGET_DIR="immortalwrt/bin/targets/rockchip/armv8"
-
-          cp "$TARGET_DIR"/*sysupgrade.img.gz \
+          TARGET_DIR="${{ env.TARGET_DIR }}"
+          cp \
+            "$TARGET_DIR/friendlyarm_nanopi-r2s-squashfs-sysupgrade.img.gz" \
             release/
-
-          cp "$TARGET_DIR"/sha256sums \
+          cp \
+            "$TARGET_DIR/friendlyarm_nanopi-r2s-ext4-sysupgrade.img.gz" \
             release/
-
-          cp "$TARGET_DIR"/config.buildinfo \
+          cp \
+            "$TARGET_DIR/sha256sums" \
             release/
-
-          cp "$TARGET_DIR"/*.manifest \
+          cp \
+            "$TARGET_DIR/config.buildinfo" \
             release/
-
-          cp immortalwrt/.config \
+          cp \
+            "$TARGET_DIR/feeds.buildinfo" \
+            release/
+          cp \
+            "$TARGET_DIR"/*.manifest \
+            release/
+          cp \
+            immortalwrt/.config \
             release/YAIF-R2S.config
-
-
+          cp \
+            YAIF-R2S-diffconfig \
+            release/
+          cp \
+            YAIF-source-revisions.txt \
+            release/
+          cp \
+            YAIF-feeds-runtime.conf \
+            release/
           echo "===== Release files ====="
-
           ls -lh release
-
-
-          echo "===== Sysupgrade count ====="
-
-          find release \
-            -name '*sysupgrade.img.gz' \
-            -type f |
+          echo "===== Verify R2S firmware count ====="
+          test -f \
+            release/friendlyarm_nanopi-r2s-squashfs-sysupgrade.img.gz
+          test -f \
+            release/friendlyarm_nanopi-r2s-ext4-sysupgrade.img.gz
+          COUNT="$(
+            find release \
+              -maxdepth 1 \
+              -type f \
+              -name 'friendlyarm_nanopi-r2s-*-sysupgrade.img.gz' |
             wc -l
-
-      # =====================================================
-      # 13. 上传固件
-      # =====================================================
+          )"
+          test "$COUNT" -eq 2
+          echo "R2S firmware preparation: OK"
 
       - name: Upload firmware
         uses: actions/upload-artifact@v4
-
         with:
           name: YAIF-25.12.1-R2S-${{ github.run_number }}
-
           retention-days: 90
-
           if-no-files-found: error
-
           path: |
             release/*
 
-      # =====================================================
-      # 14. GitHub Release
-      # =====================================================
-
       - name: Create GitHub Release
         if: ${{ inputs.release == true }}
-
         uses: softprops/action-gh-release@v2
-
         with:
           tag_name: YAIF-25.12.1-R2S-build-${{ github.run_id }}
-
           name: YAIF-25.12.1 NanoPi R2S Build ${{ github.run_number }}
-
           files: |
             release/*
-
           body: |
             ## YAIF-25.12.1 NanoPi R2S
 
@@ -545,27 +585,33 @@ jobs:
             | Item | Value |
             | --- | --- |
             | Base | ImmortalWrt 25.12.1 |
-            | Target | rockchip armv8 |
+            | Target | rockchip / armv8 |
             | Device | FriendlyARM NanoPi R2S |
-            | Kernel | Linux 6.12 |
+            | Kernel | Linux 6.12.x |
+            | Builder | Ubuntu 24.04 |
 
             ### Build Info
 
             | Item | Value |
             | --- | --- |
-            | Commit | `${{ github.sha }}` |
+            | YAIF Commit | `${{ github.sha }}` |
             | Build | ${{ github.run_number }} |
+            | Run ID | `${{ github.run_id }}` |
 
             ### Firmware
 
             | File | Description |
             | --- | --- |
-            | squashfs-sysupgrade.img.gz | 推荐长期运行版本 |
-            | ext4-sysupgrade.img.gz | 可写系统版本 |
+            | friendlyarm_nanopi-r2s-squashfs-sysupgrade.img.gz | 推荐长期运行版本 |
+            | friendlyarm_nanopi-r2s-ext4-sysupgrade.img.gz | 可写系统版本 |
             | sha256sums | SHA256 checksum |
-            | config.buildinfo | Build information |
-            | manifest | Package list |
+            | config.buildinfo | ImmortalWrt build information |
+            | feeds.buildinfo | Feed revision information |
+            | *.manifest | Package list |
             | YAIF-R2S.config | Final configuration |
+            | YAIF-R2S-diffconfig | Configuration delta |
+            | YAIF-source-revisions.txt | Source / feed revisions |
+            | YAIF-feeds-runtime.conf | Runtime feeds |
 
             ### Notes
 
