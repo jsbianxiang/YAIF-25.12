@@ -48,66 +48,17 @@
 
 #
 
-# =========================================================
-
-# 配置优先级
-
-# =========================================================
-
+# 配置来源与处理原则
 #
-
 # 1. ImmortalWrt 25.12.1 官方 Target / Device Profile / Packages
-
-# 2. Nikki feed
-
-# 3. 本 seed 的功能选择
-
+# 2. Nikki feed 提供的扩展软件包
+# 3. 本 seed 的显式功能选择
 #
-
-# 发生冲突时：
-
-# 高优先级配置优先。
-
+# 最终配置由 Kconfig / package dependency / select / depends
+# 综合计算生成。
 #
-
-# 人工筛选规则：
-
-#
-
-# CONFIG_xxx=y
-
-# 明确要求启用 / 安装。
-
-#
-
-# CONFIG_xxx=n
-
-# 明确要求禁用 / 不安装。
-
-#
-
-# # CONFIG_xxx is not set
-
-# 明确要求禁用 / 不安装。
-
-#
-
-# 注意：
-
-# 普通“不需要”的软件不主动写入禁用项，
-
-# 由 Kconfig / package dependency 决定。
-
-#
-
-# 但涉及构建行为、BPF/BTF、TLS backend、
-
-# 防火墙 backend、优化方式等功能性配置的
-
-# 明确禁用语法保留。
-
-#
-
+# 本 seed 仅对需要明确控制的功能进行人工声明。
+# 自动依赖项不重复人工展开。
 # =========================================================
 
 # =========================================================
@@ -300,11 +251,11 @@ CONFIG_PACKAGE_urngd=y
 
 # =========================================================
 
-# R2S 官方 Device Profile 已自动提供：
-
-# kmod-usb-net-rtl8152
-
-# RTL8152/RTL8153 firmware。
+# R2S USB 网卡支持。
+#
+# Device Profile / package dependency
+# 负责相应 RTL8152/RTL8153 驱动。
+# 本处显式预装对应 firmware。
 
 CONFIG_PACKAGE_r8152-firmware=y
 
@@ -417,9 +368,11 @@ CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
 # Proxy
 # ---------------------------------------------------------
 
-# 主代理：Nikki。
-# Mihomo Meta 不在 seed 中独立锁定版本。
-# 由当前 Nikki feed / package dependency 决定实际版本。
+# 主代理：Nikki + Mihomo Meta。
+#
+# mihomo-alpha 不属于本固件代理架构。
+# 由 Workflow forbidden policy 强制禁止，
+# 避免与 Mihomo Meta / Nikki 架构产生冲突。
 CONFIG_PACKAGE_nikki=y
 CONFIG_PACKAGE_luci-app-nikki=y
 CONFIG_PACKAGE_luci-i18n-nikki-zh-cn=y
