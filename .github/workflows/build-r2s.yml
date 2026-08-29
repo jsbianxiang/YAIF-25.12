@@ -228,13 +228,12 @@ jobs:
 
           cd immortalwrt
 
+          echo "=========================================="
+          echo "验证 Nikki Feed"
+          echo "=========================================="
+
           test -d feeds/nikki || {
             echo "ERROR：Nikki Feed 不存在。"
-            exit 1
-          }
-
-          test -f feeds/nikki/Makefile || {
-            echo "ERROR：Nikki Feed Makefile 不存在。"
             exit 1
           }
 
@@ -243,14 +242,35 @@ jobs:
             exit 1
           }
 
-          echo "Nikki Feed：正常"
+          echo "Nikki Feed Git 仓库：正常"
 
-          echo "===== Feed 目录 ====="
-          find feeds \
-            -mindepth 1 \
-            -maxdepth 1 \
-            -type d \
+          echo "===== 检查 Nikki 软件包 ====="
+
+          for package in \
+            nikki \
+            luci-app-nikki \
+            mihomo-meta \
+            mihomo-alpha
+          do
+            if [ ! -f "feeds/nikki/${package}/Makefile" ]; then
+              echo "ERROR：缺少 Nikki 软件包 Makefile：${package}"
+              exit 1
+            fi
+
+            echo "OK：${package}"
+          done
+
+          echo "===== Nikki Feed 提交 ====="
+          git -C feeds/nikki rev-parse HEAD
+
+          echo "===== Nikki Feed 目录 ====="
+          find feeds/nikki \
+            -maxdepth 2 \
+            -type f \
+            -name Makefile \
             -print | sort
+
+          echo "Nikki Feed：验证正常"
 
       # =====================================================
       # 8. 保存源代码和 Feed 版本
