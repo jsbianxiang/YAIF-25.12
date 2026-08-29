@@ -407,6 +407,14 @@ jobs:
 
           cd immortalwrt
 
+          echo "===== Target Device 实际配置 ====="
+
+          grep -E '^CONFIG_TARGET_(rockchip|.*DEVICE.*friendlyarm.*nanopi)' .config || true
+
+          echo "===== 所有 NanoPi R2S 相关配置 ====="
+
+          grep -Ei 'nanopi-r2s|friendlyarm' .config || true
+
           SEED="../${CONFIG_SEED}"
           FAILED=0
 
@@ -423,6 +431,14 @@ jobs:
           do
             key="${line%%=*}"
             expected="${line#*=}"
+
+            # Target Device 由第 14 步进行专门验证。
+            # 不在这里要求 CONFIG_TARGET_DEVICE_* 符号原样保留。
+            case "$key" in
+              CONFIG_TARGET_DEVICE_*)
+                continue
+                ;;
+            esac
 
             if ! grep -Fqx "${key}=${expected}" .config
             then
@@ -454,7 +470,7 @@ jobs:
               FAILED=1
             fi
           done < <(
-            grep -E '^# CONFIG_[^[:space:]]+ is not set$' "$SEED"
+            grep -E '^# CONFIG_[^=[:space:]]+ is not set$' "$SEED"
           )
 
           echo "===== CONFIG_xxx=n 配置 ====="
