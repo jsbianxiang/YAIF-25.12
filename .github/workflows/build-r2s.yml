@@ -409,7 +409,7 @@ jobs:
 
           echo "===== Target Device 实际配置 ====="
 
-          grep -E '^CONFIG_TARGET_(rockchip|rockchip_armv8|DEVICE_rockchip_armv8_DEVICE_friendlyarm_nanopi-r2s)' .config || true
+          grep -E '^CONFIG_TARGET_(rockchip|rockchip_armv8)' .config || true
 
           echo "===== 所有 NanoPi R2S 相关配置 ====="
 
@@ -586,7 +586,7 @@ jobs:
           check_config CONFIG_TOOLCHAINOPTS y
 
           echo "=========================================="
-          echo "TTarget / Subtarget"
+          echo "Target / Subtarget"
           echo "=========================================="
 
           check_config CONFIG_TARGET_rockchip y
@@ -895,15 +895,24 @@ jobs:
           test -d "$TARGET_DIR"
           ls -lh "$TARGET_DIR"
 
+          echo "===== 实际 R2S Sysupgrade 文件 ====="
+
+          find "$TARGET_DIR" \
+            -maxdepth 1 \
+            -type f \
+            -name '*nanopi-r2s*sysupgrade*' \
+            -print \
+            -exec ls -lh {} \;
+
           echo "===== R2S SquashFS 镜像 ====="
 
           test -f \
-            "$TARGET_DIR/friendlyarm_nanopi-r2s-squashfs-sysupgrade.img.gz"
+            "$TARGET_DIR/immortalwrt-rockchip-armv8-friendlyarm_nanopi-r2s-squashfs-sysupgrade.img.gz"
 
           echo "===== R2S ext4 镜像 ====="
 
           test -f \
-            "$TARGET_DIR/friendlyarm_nanopi-r2s-ext4-sysupgrade.img.gz"
+            "$TARGET_DIR/immortalwrt-rockchip-armv8-friendlyarm_nanopi-r2s-ext4-sysupgrade.img.gz"
 
           echo "===== SHA256 校验 ====="
 
@@ -941,7 +950,7 @@ jobs:
           find "$TARGET_DIR" \
             -maxdepth 1 \
             -type f \
-            -name 'friendlyarm_nanopi-r2s-*-sysupgrade.img.gz' \
+            -name 'immortalwrt-rockchip-armv8-friendlyarm_nanopi-r2s-*-sysupgrade.img.gz' \
             -print \
             -exec ls -lh {} \;
 
@@ -960,11 +969,11 @@ jobs:
           TARGET_DIR="${{ env.TARGET_DIR }}"
 
           cp \
-            "$TARGET_DIR/friendlyarm_nanopi-r2s-squashfs-sysupgrade.img.gz" \
+            "$TARGET_DIR/immortalwrt-rockchip-armv8-friendlyarm_nanopi-r2s-squashfs-sysupgrade.img.gz" \
             release/
 
           cp \
-            "$TARGET_DIR/friendlyarm_nanopi-r2s-ext4-sysupgrade.img.gz" \
+            "$TARGET_DIR/immortalwrt-rockchip-armv8-friendlyarm_nanopi-r2s-ext4-sysupgrade.img.gz" \
             release/
 
           cp \
@@ -1005,16 +1014,16 @@ jobs:
           echo "===== 验证 R2S 固件数量 ====="
 
           test -f \
-            release/friendlyarm_nanopi-r2s-squashfs-sysupgrade.img.gz
+            release/immortalwrt-rockchip-armv8-friendlyarm_nanopi-r2s-squashfs-sysupgrade.img.gz
 
           test -f \
-            release/friendlyarm_nanopi-r2s-ext4-sysupgrade.img.gz
+            release/immortalwrt-rockchip-armv8-friendlyarm_nanopi-r2s-ext4-sysupgrade.img.gz
 
           COUNT="$(
             find release \
               -maxdepth 1 \
               -type f \
-              -name 'friendlyarm_nanopi-r2s-*-sysupgrade.img.gz' |
+              -name 'immortalwrt-rockchip-armv8-friendlyarm_nanopi-r2s-*-sysupgrade.img.gz' |
             wc -l
           )"
 
@@ -1072,8 +1081,8 @@ jobs:
 
             | 文件 | 说明 |
             | --- | --- |
-            | friendlyarm_nanopi-r2s-squashfs-sysupgrade.img.gz | 推荐长期运行版本 |
-            | friendlyarm_nanopi-r2s-ext4-sysupgrade.img.gz | 可写系统版本 |
+            | immortalwrt-rockchip-armv8-friendlyarm_nanopi-r2s-squashfs-sysupgrade.img.gz | 推荐长期运行版本 |
+            | immortalwrt-rockchip-armv8-friendlyarm_nanopi-r2s-ext4-sysupgrade.img.gz | 可写系统版本 |
             | sha256sums | SHA256 校验 |
             | config.buildinfo | ImmortalWrt 构建信息 |
             | feeds.buildinfo | Feed 版本信息 |
