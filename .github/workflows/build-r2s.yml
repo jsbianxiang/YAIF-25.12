@@ -409,7 +409,7 @@ jobs:
 
           echo "===== Target Device 实际配置 ====="
 
-          grep -E '^CONFIG_TARGET_(rockchip|.*DEVICE.*friendlyarm.*nanopi)' .config || true
+          grep -E '^CONFIG_TARGET_(rockchip|rockchip_armv8|DEVICE_rockchip_armv8_DEVICE_friendlyarm_nanopi-r2s)' .config || true
 
           echo "===== 所有 NanoPi R2S 相关配置 ====="
 
@@ -431,14 +431,6 @@ jobs:
           do
             key="${line%%=*}"
             expected="${line#*=}"
-
-            # Target Device 由第 14 步进行专门验证。
-            # 不在这里要求 CONFIG_TARGET_DEVICE_* 符号原样保留。
-            case "$key" in
-              CONFIG_TARGET_DEVICE_*)
-                continue
-                ;;
-            esac
 
             if ! grep -Fqx "${key}=${expected}" .config
             then
@@ -599,6 +591,7 @@ jobs:
 
           check_config CONFIG_TARGET_rockchip y
           check_config CONFIG_TARGET_rockchip_armv8 y
+          check_config CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r2s y
 
           echo "OK：目标设备由后续固件输出验证"
           echo "预期 Device：friendlyarm_nanopi-r2s"
