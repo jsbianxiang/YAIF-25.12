@@ -95,8 +95,8 @@ config interface 'lan'
 
 	# 不向 LAN 下游继续进行 IPv6 前缀委派
 	#
-	# 当前上游仅提供可供 R2S LAN 使用的 /64，
-	# 没有额外前缀可继续分配给下级路由。
+	# R2S LAN 用于直接连接家庭终端设备，
+	# 不承担下级 IPv6 路由器的 Prefix Delegation。
 	option delegate '0'
 
 	# 使用 EUI-64 生成 IPv6 接口标识

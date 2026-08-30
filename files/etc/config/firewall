@@ -37,14 +37,16 @@ config defaults
 	# 启用 SYN Flood 防护
 	option synflood_protect '1'
 
-	# 启用 丢弃 INVALID 状态连接
+	# 丢弃 INVALID 状态连接
+	#
+	# YAIF 安全策略：主动丢弃 conntrack 标记为 INVALID 的数据包。
 	option drop_invalid '1'
 
 	# 启用 FullCone NAT
 	option fullcone '1'
 
 	# 启用 FullCone NAT6
-	option fullcone6 '1'
+	option fullcone6 '0'
 
 	# 默认拒绝进入路由器的流量
 	option input 'REJECT'

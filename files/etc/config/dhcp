@@ -94,12 +94,18 @@ config dnsmasq
 	# DNS 最大并发转发数量
 	option dnsforwardmax '150'
 
-	# 禁用 dnsmasq DNS 缓存
+	# DNS 缓存
 	#
-	# DNS 缓存由 Mihomo DNS 引擎负责
+	# 保留 dnsmasq 本地 DNS 缓存。
+	# Mihomo 负责代理 DNS，但 dnsmasq 仍承担本地 DNS
+	# 与 DHCP 主机名解析，因此不强制关闭缓存。
 	option cachesize '8000'
 
-	# 不设置最小缓存时间
+	# DNS 最小缓存时间
+	#
+	# 将短 TTL DNS 记录的缓存时间延长至 3600 秒。
+	#
+	# 保持 ImmortalWrt 25.12.1 官方默认行为。
 	option min_cache_ttl '3600'
 
 	# 设置最大缓存时间
@@ -182,7 +188,7 @@ config dhcp 'lan'
 	# 不附加额外 RA 标志
 	list ra_flags 'none'
 
-	# 不通过 IPv6 RA 下发 DNS 服务器（RDNSS）
+	# 不通过 DHCPv6 / RA 向 LAN 客户端提供 IPv6 DNS
 	#
 	# 目的：
 	#   - 防止客户端获得 IPv6 DNS
@@ -192,7 +198,7 @@ config dhcp 'lan'
 	# IPv6 仅负责地址分配和路由通告，
 	# DNS 统一通过 IPv4 入口由 Mihomo 接管。
 	option dns_service '0'
-
+	option ra_dns '0'
 
 # =========================================================
 # 3. odhcpd 全局配置
