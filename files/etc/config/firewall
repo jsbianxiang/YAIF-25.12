@@ -383,8 +383,3 @@ config include 'zerotier_forward'
 	option path '/var/run/zerotier-one/_fw4/forward.nft'
 	option position 'chain-pre'
 	option chain 'forward'
-
-config include 'nikki'
-	option type 'script'
-	option path '/etc/nikki/scripts/firewall_include.sh'
-	option fw4_compatible '1'
