@@ -2,408 +2,627 @@
 
 **Yet Another ImmortalWrt Firmware**
 
-面向 **FriendlyARM NanoPi R2S** 的 ImmortalWrt 25.12.1 长期维护型固件构建项目。
+面向 **FriendlyARM NanoPi R2S** 的 ImmortalWrt 25.12.1 长期维护型固件基线。
 
-本项目坚持使用接近原生的 **ImmortalWrt** 作为基础，通过独立的 R2S `config.seed`、自定义 Feeds、文件注入和 GitHub Actions 构建工作流，生成可重复、可审计、便于长期维护的 NanoPi R2S 固件。
-
-> **项目目标不是堆叠功能，而是在保持 ImmortalWrt 原生结构的基础上，为 NanoPi R2S 建立稳定、清晰、可维护的固件基线。**
+YAIF 的目标不是制作一个堆叠大量软件的“全家桶固件”，而是在尽可能保持 **ImmortalWrt 原生结构** 的基础上，为 NanoPi R2S 提供一套稳定、可重复构建、可审计、便于长期维护的系统基线。
 
 ---
 
-## 项目状态
+## 项目定位
 
-| 项目      | 状态                     |
-| ------- | ---------------------- |
-| 基础系统    | ImmortalWrt 25.12.1    |
-| 上游基线    | ImmortalWrt 25.12      |
-| 硬件      | FriendlyARM NanoPi R2S |
-| SoC     | Rockchip RK3328        |
-| 架构      | ARM64 / Rockchip ARMv8 |
-| 构建平台    | GitHub Actions         |
-| 构建环境    | Ubuntu 24.04           |
-| 包管理器    | APK                    |
-| 主代理     | Nikki + Mihomo Meta    |
-| 备用代理    | Daed                   |
-| 文件系统    | SquashFS / ext4        |
-| 构建方式    | GitHub Actions 手动触发    |
-| License | GPL-3.0                |
+YAIF-25.12 基于原生 ImmortalWrt 构建，针对 NanoPi R2S 进行设备、内核、网络及必要软件包适配。
 
----
-
-# 主要特点
-
-## 1. 原生 ImmortalWrt 基线
-
-项目直接基于固定版本的 ImmortalWrt 25.12.1 构建，不以其他第三方固件作为二次基础。
-
-这样做的主要目的：
-
-* 保持与 ImmortalWrt 上游结构的一致性
-* 降低长期维护成本
-* 减少第三方 Patch 对系统的侵入
-* 方便后续跟踪上游修复
-* 便于通过 `diffconfig` 和最终 `.config` 对配置进行审计
-
-ImmortalWrt 版本在构建工作流中固定：
+核心思路：
 
 ```text
-ImmortalWrt 25.12.1
+原生 ImmortalWrt
+        │
+        ├── R2S 硬件适配
+        ├── IPv4 / IPv6 双栈
+        ├── firewall4 / nftables
+        ├── TUN / TProxy 所需内核能力
+        ├── Clashoo
+        │     ├── Mihomo
+        │     └── sing-box
+        │
+        └── Daed（备用）
 ```
 
-不会因为默认分支更新而自动漂移。
+YAIF 负责提供稳定的系统基础。
+
+代理软件负责具体的代理、DNS、透明代理及流量策略。
+
+两者尽量保持职责分离。
 
 ---
 
-# 2. NanoPi R2S 专用配置
+# 基础环境
 
-本项目针对：
+| 项目     | 配置                     |
+| ------ | ---------------------- |
+| 基础系统   | ImmortalWrt 25.12.1    |
+| 上游基线   | ImmortalWrt 25.12      |
+| 目标设备   | FriendlyARM NanoPi R2S |
+| SoC    | Rockchip RK3328        |
+| CPU 架构 | ARM64 / ARMv8          |
+| 防火墙    | firewall4 / nftables   |
+| 包管理    | APK                    |
+| 构建方式   | GitHub Actions         |
+| 文件系统   | SquashFS / ext4        |
+| IPv4   | NAT                    |
+| IPv6   | 原生双栈                   |
+| 主代理管理  | Clashoo                |
+| 代理内核   | Mihomo / sing-box      |
+| 备用代理   | Daed                   |
+
+---
+
+# NanoPi R2S
+
+YAIF 针对 FriendlyARM NanoPi R2S 单独维护构建配置。
+
+R2S：
 
 ```text
-FriendlyARM NanoPi R2S
 Rockchip RK3328
 ARM64
+双千兆以太网
 ```
 
-提供独立配置种子：
+项目提供 R2S 专用配置种子及构建流程。
+
+当前仓库结构：
 
 ```text
-device/r2s/config.seed
+YAIF-25.12/
+├── .github/
+│   └── workflows/
+│       ├── build-r2s.yml
+│       └── clean-runs.yml
+│
+├── device/
+│   └── r2s/
+│       ├── config.seed
+│       ├── Diy-Part1.sh
+│       └── Diy-Part2.sh
+│
+├── files/
+│   └── etc/
+│       ├── apk/
+│       │   └── keys/
+│       └── config/
+│           └── network
+│
+├── LICENSE
+└── README.md
 ```
 
-构建过程中：
+构建配置以 `config.seed` 为主要入口，通过 `make defconfig` 生成最终配置。
 
-```text
-config.seed
-    ↓
-make defconfig
-    ↓
-最终 .config
-```
-
-而不是直接维护一个未经处理的最终 `.config`。
-
-这样可以让 R2S 的功能选择、内核配置和软件包配置保持集中管理。
+这样可以避免长期直接维护完整 `.config`，降低上游版本变化造成的配置漂移。
 
 ---
 
-# 3. Nikki + Mihomo Meta
+# 网络架构
 
-项目默认代理架构：
+YAIF 面向二级路由使用场景。
 
-```text
-Nikki
-  ↓
-Mihomo Meta
-  ↓
-TUN / TProxy
-```
-
-Nikki 软件源单独维护，并在构建过程中记录 Feed Commit。
-
-当前使用：
+典型网络结构：
 
 ```text
-nikki
-luci-app-nikki
-mihomo-meta
+                 上级光猫 / 主路由
+                         │
+                  IPv4 / IPv6
+                         │
+                         ▼
+                ┌────────────────┐
+                │   NanoPi R2S   │
+                │     YAIF       │
+                └───────┬────────┘
+                        │
+                       LAN
+                        │
+             ┌──────────┼──────────┐
+             │          │          │
+            PC        手机       IoT / TV
 ```
 
-`mihomo-alpha` 虽然存在于 Nikki Feed 中，但本项目明确不启用 Alpha 版本，以避免与 Mihomo Meta 产生不必要的包依赖和配置冲突。
+R2S 负责：
 
----
-
-# 4. Daed 备用代理
-
-除 Nikki 外，同时提供 Daed：
-
-```text
-daed
-luci-app-daed
-luci-i18n-daed-zh-cn
-```
-
-Daed 作为备用代理方案保留，而不是与 Nikki 同时承担主代理职责。
-
-这样可以在需要时切换代理内核，而不需要重新设计整个固件基础。
-
----
-
-# 5. IPv6
-
-IPv6 保持启用。
-
-项目并不采用简单粗暴的“完全关闭 IPv6”方案，而是保留完整的 IPv6 网络能力，使 R2S 可以正常工作于 IPv4 / IPv6 双栈网络环境。
-
-具体的 IPv6 策略、DNS 策略和代理规则由运行时配置负责，而不是在固件构建阶段强制关闭 IPv6。
-
----
-
-# 6. nftables / FullCone / TProxy
-
-固件基于 ImmortalWrt 25.12 的 nftables 防火墙体系。
-
-重点保留：
-
+* LAN 网关
+* IPv4 NAT
+* IPv6 路由
+* IPv6 Prefix Delegation
+* DHCPv4
+* IPv6 RA
 * firewall4
 * nftables
-* nftables JSON
-* nft TProxy
-* nft socket
-* nft FullCone
-* Netfilter connection tracking
-* NAT
-* Flow / connection tracking 相关内核模块
-
-传统 iptables legacy 体系不作为本项目的基础。
+* 代理运行环境
 
 ---
 
-# 7. BPF / BTF
+# IPv4 / IPv6 双栈
 
-内核保留较完整的 BPF / BTF 能力，包括：
+YAIF 不通过关闭 IPv6 来解决代理兼容性问题。
 
-* BPF toolchain
-* DWARVES
-* Kernel BPF events
-* Kernel BPF stream parser
-* cgroups
-* Kprobes
-* Netkit
-* XDP sockets
-* BPF / BTF debug information
-* BTF module support
-* XDP socket diagnostics
-* sched-bpf
+系统保持原生 IPv4 / IPv6 双栈能力。
 
-这些配置并不是为了单纯追求“功能数量”，而是作为长期维护内核时的基础能力保留。
-
----
-
-# 8. 内核与网络能力
-
-项目保留 NanoPi R2S 网络代理环境所需要的相关内核模块，包括：
-
-### TUN / TProxy
+IPv4：
 
 ```text
+LAN
+ │
+ ▼
+R2S
+ │
+ └── NAT
+      │
+      ▼
+    WAN
+```
+
+IPv6：
+
+```text
+上游 IPv6 / DHCPv6-PD
+          │
+          ▼
+         R2S
+          │
+          ▼
+       LAN /64
+          │
+          ▼
+       LAN 客户端
+```
+
+IPv6 负责原生网络连通性。
+
+代理软件根据实际代理策略决定哪些 IPv6 流量进入代理。
+
+---
+
+# firewall4 / nftables
+
+YAIF 使用 ImmortalWrt 25.12 原生的：
+
+```text
+firewall4
+    │
+    └── nftables
+```
+
+不以 legacy iptables / ip6tables 作为基础防火墙体系。
+
+系统保留透明代理所需的相关 Netfilter 能力，包括：
+
+```text
+kmod-nft-socket
+kmod-nft-tproxy
 kmod-tun
 kmod-dummy
 kmod-inet-diag
-kmod-nft-socket
-kmod-nft-tproxy
+ip-full
 ```
 
-### Connection Tracking
-
-```text
-kmod-nf-conntrack
-kmod-nf-conntrack6
-kmod-nf-conntrack-netlink
-kmod-nf-nat
-kmod-nft-nat
-```
-
-### FullCone / Offload
-
-```text
-kmod-nft-fullcone
-kmod-nft-offload
-kmod-nf-flow
-```
-
-### BBR
-
-```text
-kmod-tcp-bbr
-```
+这些组件也是 Clashoo 官方列出的透明代理运行依赖。
 
 ---
 
-# 9. BBR / ZRAM
+# Clashoo
 
-项目默认保留：
+YAIF 当前主要代理管理方案为 **Clashoo**。
 
-```text
-kmod-tcp-bbr
-zram-swap
-```
+Clashoo 是面向 OpenWrt 的双内核代理管理插件，而不是单独的代理内核。
 
-以及 ZRAM 所需要的压缩算法模块：
+官方支持：
 
 ```text
-kmod-lib-lz4
-kmod-lib-lzo
-kmod-lib-zstd
+Clashoo
+│
+├── Mihomo
+│    ├── Stable
+│    ├── Alpha
+│    └── Smart
+│
+└── sing-box
+     ├── Stable
+     └── Alpha
 ```
 
-运行时具体的 TCP 拥塞控制和 ZRAM 参数属于系统运行配置，不通过固件编译阶段强行写死。
+Clashoo 支持在 LuCI 中切换代理内核，并使用统一的 UCI 配置适配不同内核。内核切换无需重新安装插件。
+
+官方项目：
+
+https://github.com/kenzok8/openwrt-clashoo
 
 ---
 
-# 10. SquashFS + ext4
+# Clashoo 透明代理
 
-项目同时构建两种系统镜像：
+透明代理由 Clashoo 负责具体管理。
 
-### SquashFS
+官方支持：
 
-适合作为长期运行的推荐版本：
-
-```text
-immortalwrt-rockchip-armv8-friendlyarm_nanopi-r2s-squashfs-sysupgrade.img.gz
-```
-
-### ext4
-
-提供可写系统：
+### TCP
 
 ```text
-immortalwrt-rockchip-armv8-friendlyarm_nanopi-r2s-ext4-sysupgrade.img.gz
+Redirect
+TProxy
+TUN
 ```
 
-两种文件系统各有用途，不强制所有用户使用同一种方案。
+### UDP
+
+```text
+TProxy
+TUN
+```
+
+### TUN 网络栈
+
+```text
+gVisor
+System
+Mixed
+```
+
+具体模式属于运行时代理配置，而不是 YAIF 固件构建阶段固定的网络策略。
+
+因此 YAIF 的职责主要是：
+
+```text
+Linux 内核
+    │
+    ├── TUN
+    ├── Netfilter
+    ├── nftables
+    ├── TProxy
+    └── socket
+          │
+          ▼
+       Clashoo
+          │
+          ▼
+   Mihomo / sing-box
+```
+
+而不是在 YAIF 中硬编码具体代理规则。
+
+---
+
+# Clashoo DNS
+
+Clashoo 本身提供完整的 DNS 管理能力，包括：
+
+* Fake-IP
+* Redir-Host
+* 默认 / 代理 / 直连 / Fallback DNS
+* Bootstrap DNS
+* Fallback GeoIP
+* ECS
+* DNS 防泄漏
+* DoT / DoQ 阻断
+* 国内域名规则集
+
+因此 YAIF 的基础网络配置不会试图复制 Clashoo 的 DNS 策略。
+
+具体 DNS 行为由 Clashoo / Mihomo / sing-box 的运行时配置决定。
+
+---
+
+# Daed
+
+YAIF **继续保留 Daed**。
+
+Daed 不作为 Clashoo 的替代品，而作为备用代理方案。
+
+定位：
+
+```text
+                 YAIF
+                   │
+          ┌────────┴────────┐
+          │                 │
+       Clashoo             Daed
+        主方案             备用方案
+          │
+     ┌────┴────┐
+  Mihomo   sing-box
+```
+
+两者不要求同时运行。
+
+保留 Daed 的主要原因是：
+
+* 性能表现优秀
+* 配置简单
+* 可以作为备用代理环境
+* 与 Clashoo / Mihomo 的规则体系存在差异
+* 当主代理方案出现问题时，可以快速切换进行验证
+
+---
+
+# FullCone NAT
+
+YAIF 保留 FullCone NAT 支持。
+
+IPv4：
+
+```text
+FullCone NAT
+```
+
+主要面向：
+
+* P2P
+* UDP
+* NAT 穿透
+* 实时通信
+* 部分特殊应用
+
+IPv6 则保持原生 IPv6 路由。
+
+IPv6 是否使用 FullCone 相关能力属于运行环境策略，不作为 IPv4 NAT 的简单复制。
+
+---
+
+# Flow Offloading
+
+YAIF 默认关闭：
+
+```text
+Software Flow Offloading
+Hardware Flow Offloading
+```
+
+原因是透明代理环境需要保证流量能够正常经过：
+
+```text
+Netfilter
+TProxy
+TUN
+socket
+policy routing
+```
+
+对于 R2S 这样的透明代理网关：
+
+> **优先保证流量路径正确和代理稳定，而不是单纯追求最高 NAT 转发吞吐量。**
+
+---
+
+# IPv6 ICMP
+
+YAIF 保留 IPv6 正常运行所需要的 ICMPv6。
+
+包括：
+
+* Echo Request / Reply
+* Destination Unreachable
+* Packet Too Big
+* Time Exceeded
+* Bad Header
+* Unknown Header Type
+* Neighbor Discovery
+* Router Solicitation
+* Router Advertisement
+
+其中 `Packet Too Big` 对 IPv6 Path MTU Discovery 尤其重要。
+
+因此 YAIF 不采用“为了代理稳定而全面阻断 ICMPv6”的方案。
+
+---
+
+# DHCP / RA
+
+LAN DHCPv4 由 dnsmasq 提供。
+
+IPv6 则由 odhcpd 提供：
+
+```text
+DHCPv6
+RA
+ND
+```
+
+典型结构：
+
+```text
+WAN6
+ │
+ └── DHCPv6 / Prefix Delegation
+             │
+             ▼
+            R2S
+             │
+             ▼
+          LAN /64
+             │
+             ▼
+        IPv6 RA 客户端
+```
+
+IPv6 地址分配和路由通告属于系统网络层职责。
+
+代理 DNS 策略属于 Clashoo / Mihomo / sing-box 职责。
+
+---
+
+# DNS 设计原则
+
+YAIF 将：
+
+```text
+网络地址分配
+```
+
+与：
+
+```text
+代理 DNS
+```
+
+进行解耦。
+
+系统层：
+
+```text
+dnsmasq
+odhcpd
+```
+
+负责：
+
+* DHCPv4
+* 本地域名
+* LAN 地址
+* IPv6 RA
+
+代理层：
+
+```text
+Clashoo
+   │
+Mihomo / sing-box
+```
+
+负责：
+
+* DNS 分流
+* Fake-IP / Redir-Host
+* 代理 DNS
+* DNS 防泄漏
+* DNS 劫持
+
+这样可以避免把具体代理规则固化到 YAIF 基础系统。
+
+---
+
+# BBR
+
+YAIF 保留 Linux BBR 所需内核能力。
+
+BBR 的运行时参数不强制写死在固件构建阶段。
+
+这样可以根据实际线路和网络环境进行调整，而无需重新编译固件。
+
+---
+
+# ZRAM
+
+R2S 保留 ZRAM 相关能力。
+
+主要用于在资源压力较高时提供压缩交换空间。
+
+ZRAM 的具体运行参数属于系统运行时配置，不作为固件构建阶段永久固定的网络策略。
 
 ---
 
 # 构建系统
 
-项目完全通过 GitHub Actions 构建。
+YAIF 使用 GitHub Actions 构建。
 
-核心工作流：
-
-```text
-.github/workflows/
-└── build-r2s.yml
-```
-
-构建流程大致如下：
+基本流程：
 
 ```text
-Checkout YAIF
-      ↓
-安装构建依赖
-      ↓
-检查构建环境
-      ↓
-固定 Clone ImmortalWrt 25.12.1
-      ↓
-添加 YAIF / Nikki Feed
-      ↓
-更新并安装 Feeds
-      ↓
-验证 Nikki Feed
-      ↓
-注入 YAIF 自定义文件
-      ↓
-应用 device/r2s/config.seed
-      ↓
-make defconfig
-      ↓
-验证最终 .config
-      ↓
-检查禁止配置
-      ↓
-生成 diffconfig
-      ↓
-保存构建状态
-      ↓
-make download
-      ↓
-完整编译
-      ↓
-验证 R2S 固件
-      ↓
-SHA256 校验
-      ↓
-生成 Artifact
-      ↓
-可选 GitHub Release
+Clone ImmortalWrt 25.12.1
+          │
+          ▼
+      更新 feeds
+          │
+          ▼
+    加入第三方组件
+          │
+          ▼
+      注入文件
+          │
+          ▼
+    应用 R2S config.seed
+          │
+          ▼
+     make defconfig
+          │
+          ▼
+       配置检查
+          │
+          ▼
+        编译
+          │
+          ▼
+     构建结果检查
+          │
+          ▼
+       Firmware
 ```
+
+构建过程尽可能保持可重复、可审计。
 
 ---
 
-# 构建参数审计
+# 配置维护原则
 
-本项目并不是简单执行：
+YAIF 长期维护遵循以下原则。
 
-```bash
-make
-```
+### 1. 原生优先
 
-而是在实际编译前对最终 `.config` 进行多层检查。
+尽可能保持 ImmortalWrt 官方默认行为。
 
-包括：
+### 2. 必要修改
 
-* CONFIG 重复项检查
-* `config.seed` 选择检查
-* 明确禁用配置检查
-* 禁止配置检查
-* Target / Subtarget / Device 检查
-* 固件分区大小检查
-* IPv6 检查
-* Nikki 检查
-* Daed 检查
-* firewall4 / nftables 检查
-* TUN / TProxy 检查
-* Netfilter 检查
-* FullCone 检查
-* BPF / BTF 检查
-* Crypto 依赖检查
-* BBR / ZRAM 检查
+只有存在明确需求时才修改默认配置。
 
-如果最终 `.config` 与项目预期不一致，构建会在真正编译前直接失败。
+### 3. 不追求参数堆叠
 
----
+不会因为某个参数“理论上更快”就加入基线。
 
-# Target
+### 4. 系统与代理解耦
 
-NanoPi R2S 使用：
+YAIF 提供代理运行环境。
 
-```text
-Target:
-    rockchip
+Clashoo 负责代理运行策略。
 
-Subtarget:
-    rockchip / armv8
+### 5. IPv6 保持完整能力
 
-Device:
-    friendlyarm_nanopi-r2s
-```
+不通过关闭 IPv6 解决代理问题。
 
-对应构建配置：
+### 6. 配置可审计
 
-```text
-CONFIG_TARGET_rockchip=y
-CONFIG_TARGET_rockchip_armv8=y
-CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r2s=y
-```
+每一项非默认配置都应该能够解释原因。
 
-固件输出目录：
+### 7. 长期维护优先
 
-```text
-bin/targets/rockchip/armv8/
-```
+优先考虑稳定、兼容和后续升级，而不是短期极限性能。
 
 ---
 
-# 固件布局
+# 软件包原则
 
-当前 R2S 基线：
+YAIF 不追求预装大量软件。
 
-```text
-Kernel partition:
-    64 MB
-
-RootFS partition:
-    1024 MB
-```
-
-同时生成：
+软件包主要分为：
 
 ```text
-SquashFS
-ext4
-gzip compressed images
+基础系统
+│
+├── ImmortalWrt 原生组件
+│
+├── R2S 硬件支持
+│
+├── 网络 / IPv6
+│
+├── firewall4 / nftables
+│
+├── 透明代理基础能力
+│
+├── Clashoo
+│
+└── Daed
 ```
+
+具体软件包以 `config.seed` 和构建结果为准。
+
+不会仅因为某个软件“可能有用”就加入长期固件基线。
 
 ---
 
@@ -426,281 +645,57 @@ YAIF-25.12/
 ├── files/
 │   └── etc/
 │       ├── apk/
+│       │   └── keys/
 │       └── config/
+│           └── network
 │
 ├── LICENSE
 └── README.md
 ```
 
-### `config.seed`
-
-R2S 的核心配置入口。
-
-负责：
-
-* Target
-* Kernel
-* 软件包
-* 网络相关内核模块
-* BPF / BTF
-* BBR
-* ZRAM
-* Nikki
-* Daed
-* 其他固件功能
-
 ---
 
-### `Diy-Part1.sh`
-
-在 Feeds 更新之前执行。
-
-主要负责：
-
-* 添加 YAIF 自定义软件源
-* 配置 Nikki Feed
-* 准备构建所需的软件源环境
-
----
-
-### `Diy-Part2.sh`
-
-在 Feeds 安装之后执行。
-
-主要负责：
-
-* 注入自定义文件
-* 默认系统配置
-* 网络配置
-* 防火墙相关配置
-* 固件版本相关内容
-* 其他构建阶段需要注入的文件
-
----
-
-# 构建产物
-
-成功构建后会生成两类 Artifact。
-
-## Build State
-
-包含：
-
-```text
-YAIF-R2S-final.config
-YAIF-R2S-diffconfig
-YAIF-source-revisions.txt
-YAIF-feeds.conf
-YAIF-feeds-runtime.conf
-YAIF-feeds-runtime-dir.tar.gz
-device/r2s/config.seed
-```
-
-用于长期保存构建环境和配置基线。
-
----
-
-## Firmware
-
-包含：
-
-```text
-*.squashfs-sysupgrade.img.gz
-*.ext4-sysupgrade.img.gz
-sha256sums
-config.buildinfo
-feeds.buildinfo
-*.manifest
-YAIF-R2S.config
-YAIF-R2S-diffconfig
-YAIF-source-revisions.txt
-YAIF-feeds-runtime.conf
-```
-
-这些文件可以帮助确认：
-
-* 使用了哪个 ImmortalWrt Commit
-* 使用了哪个 Nikki Feed Commit
-* 使用了什么最终配置
-* 构建时启用了哪些软件包
-* 固件对应哪个 GitHub Actions Run
-
----
-
-# 如何构建
-
-进入 GitHub 仓库：
-
-[YAIF-25.12](https://github.com/jsbianxiang/YAIF-25.12?utm_source=chatgpt.com)
-
-进入：
-
-```text
-Actions
-  ↓
-Build ImmortalWrt 25.12.1 for NanoPi R2S
-  ↓
-Run workflow
-```
-
-可选择：
-
-```text
-ssh
-```
-
-开启 SSH 调试。
-
-也可以选择：
-
-```text
-release
-```
-
-构建成功后自动创建 GitHub Release。
-
----
-
-# 下载固件
-
-构建成功后，可以从 GitHub Actions 的 Artifact 获取固件。
-
-如果启用了 Release，则可以直接从：
-
-[YAIF-25.12 Releases](https://github.com/jsbianxiang/YAIF-25.12/releases?utm_source=chatgpt.com)
-
-获取对应版本。
-
-刷写前建议使用项目提供的：
-
-```text
-sha256sums
-```
-
-验证文件完整性。
-
----
-
-# 长期维护原则
-
-YAIF 不追求频繁追新版本，而强调：
-
-### 1. 固定基础版本
-
-构建工作流明确固定：
-
-```text
-ImmortalWrt 25.12.1
-```
-
-避免构建环境无意漂移。
-
-### 2. 配置集中管理
-
-R2S 配置集中在：
-
-```text
-device/r2s/config.seed
-```
-
-避免大量散落的配置修改。
-
-### 3. 保持上游结构
-
-尽可能使用 ImmortalWrt 原生机制，而不是大量修改底层源码。
-
-### 4. 构建结果可追溯
-
-每次构建记录：
-
-```text
-YAIF Commit
-ImmortalWrt Commit
-Nikki Feed Commit
-GitHub Run Number
-GitHub Run ID
-```
-
-### 5. 先验证，再编译
-
-最终 `.config` 不符合预期时，构建应该在真正编译之前失败。
-
----
-
-# 关于性能
-
-NanoPi R2S 使用 Rockchip RK3328 ARM64 平台。
-
-YAIF 不宣称某个固定的“千兆跑满”或固定测速结果。
-
-实际性能会受到：
-
-* 网络协议
-* PPPoE
-* IPv4 / IPv6
-* TUN / TProxy
-* DNS
-* 代理协议
-* 加密方式
-* 连接数
-* MTU
-* 防火墙规则
-* CPU 负载
-* 温度
-
-等因素影响。
-
-因此，本项目更关注：
-
-> **稳定性、可维护性、配置透明度和长期可复现性。**
-
----
-
-# 注意事项
-
-1. 本项目面向熟悉 OpenWrt / ImmortalWrt 的用户。
-2. 固件中的代理软件及相关配置仅作为网络工具使用。
-3. 不同网络环境可能需要调整运行时配置。
-4. 刷写固件前请确认设备型号为 **NanoPi R2S**。
-5. 刷写前建议备份当前配置。
-6. 固件升级、恢复和配置迁移产生的问题需要结合实际环境判断。
-7. 不建议未经验证直接把 R2S 配置用于其他 Rockchip 设备。
+# 构建与使用
+
+本项目主要面向已经熟悉 ImmortalWrt / OpenWrt 的用户。
+
+构建完成后：
+
+1. 下载对应 NanoPi R2S 固件。
+2. 刷写或升级 ImmortalWrt。
+3. 根据实际网络环境配置 WAN / LAN。
+4. 配置 IPv6 / DHCPv6-PD。
+5. 安装或启用 Clashoo。
+6. 选择 Mihomo 或 sing-box 内核。
+7. 导入代理订阅或配置文件。
+8. 根据实际需求配置 TCP / UDP / TUN。
+9. 根据需要保留 Daed 作为备用代理方案。
+
+Clashoo 的具体安装、内核下载、配置管理和透明代理设置请参考其官方项目文档。
 
 ---
 
 # 上游项目
 
-本项目基于以下开源项目：
+* ImmortalWrt
+  https://github.com/immortalwrt/immortalwrt
 
-* [ImmortalWrt](https://github.com/immortalwrt/immortalwrt?utm_source=chatgpt.com)
-* [Nikki](https://github.com/nikkinikki-org/nikki?utm_source=chatgpt.com)
+* Clashoo
+  https://github.com/kenzok8/openwrt-clashoo
 
-感谢所有上游项目及开源社区贡献者。
+* Mihomo
+  https://github.com/MetaCubeX/mihomo
+
+* sing-box
+  https://github.com/SagerNet/sing-box
+
+* Daed
+  https://github.com/daeuniverse/daed
 
 ---
 
 # License
 
-本项目采用：
+本项目采用 GPL-3.0 License。
 
-**GPL-3.0**
-
-具体许可证内容请参见：
-
-```text
-LICENSE
-```
-
-本项目中的第三方组件分别遵循其各自的开源许可证。
-
----
-
-# Disclaimer
-
-本项目为个人维护的固件构建项目。
-
-YAIF 不代表 ImmortalWrt 官方，也不代表 FriendlyARM 官方。
-
-使用本项目构建或刷写固件前，请自行确认设备、配置和网络环境。
-
-**使用风险由使用者自行承担。**
+第三方组件遵循各自项目的开源许可证及版权声明。

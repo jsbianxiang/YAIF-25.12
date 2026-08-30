@@ -14,7 +14,7 @@ name: Build ImmortalWrt 25.12.1 for NanoPi R2S
 #   GitHub Actions / Ubuntu 24.04
 #
 # 代理架构：
-#   主代理：Nikki + Mihomo Meta
+#   主代理：Clashoo
 #   备用代理：Daed
 #
 # 配置来源：
@@ -219,61 +219,59 @@ jobs:
           ./scripts/feeds install -a
 
       # =====================================================
-      # 7. 验证 Nikki Feed
+      # 7. 验证 Clashoo 源码
       # =====================================================
 
-      - name: 验证 Nikki Feed
+      - name: 验证 Clashoo 源码
         run: |
           set -euo pipefail
 
           cd immortalwrt
 
           echo "=========================================="
-          echo "验证 Nikki Feed"
+          echo "验证 Clashoo 源码"
           echo "=========================================="
 
-          test -d feeds/nikki || {
-            echo "ERROR：Nikki Feed 不存在。"
+          test -d package/openwrt-clashoo || {
+            echo "ERROR：Clashoo 源码目录不存在。"
             exit 1
           }
 
-          git -C feeds/nikki rev-parse HEAD >/dev/null 2>&1 || {
-            echo "ERROR：Nikki Feed 不是有效的 Git 仓库。"
+          git -C package/openwrt-clashoo rev-parse HEAD >/dev/null 2>&1 || {
+            echo "ERROR：Clashoo 源码目录不是有效的 Git 仓库。"
             exit 1
           }
 
-          echo "Nikki Feed Git 仓库：正常"
+          echo "Clashoo Git 仓库：正常"
 
-          echo "===== 检查 Nikki 软件包 ====="
+          echo "===== 检查 Clashoo 软件包 ====="
 
           for package in \
-            nikki \
-            luci-app-nikki \
-            mihomo-meta \
-            mihomo-alpha
+            clashoo \
+            luci-app-clashoo
           do
-            if [ ! -f "feeds/nikki/${package}/Makefile" ]; then
-              echo "ERROR：缺少 Nikki 软件包 Makefile：${package}"
+            if [ ! -f "package/openwrt-clashoo/${package}/Makefile" ]; then
+              echo "ERROR：缺少 Clashoo 软件包 Makefile：${package}"
               exit 1
             fi
 
             echo "OK：${package}"
           done
 
-          echo "===== Nikki Feed 提交 ====="
-          git -C feeds/nikki rev-parse HEAD
+          echo "===== Clashoo Git 提交 ====="
+          git -C package/openwrt-clashoo rev-parse HEAD
 
-          echo "===== Nikki Feed 目录 ====="
-          find feeds/nikki \
+          echo "===== Clashoo 软件包目录 ====="
+          find package/openwrt-clashoo \
             -maxdepth 2 \
             -type f \
             -name Makefile \
             -print | sort
 
-          echo "Nikki Feed：验证正常"
+          echo "Clashoo 源码：验证正常"
 
       # =====================================================
-      # 8. 保存源代码和 Feed 版本
+      # 8. 保存源代码和第三方版本信息
       # =====================================================
 
       - name: 保存源代码版本信息
@@ -285,13 +283,13 @@ jobs:
           cp feeds.conf.default ../YAIF-feeds.conf
 
           IMMORTALWRT_COMMIT="$(git rev-parse HEAD)"
-          NIKKI_COMMIT="$(git -C feeds/nikki rev-parse HEAD)"
+          CLASHOO_COMMIT="$(git -C package/openwrt-clashoo rev-parse HEAD)"
 
           cat > ../YAIF-source-revisions.txt <<EOF
           YAIF Commit: ${GITHUB_SHA}
           ImmortalWrt Version: ${IMMORTALWRT_VERSION}
           ImmortalWrt Commit: ${IMMORTALWRT_COMMIT}
-          Nikki Feed Commit: ${NIKKI_COMMIT}
+          Clashoo Commit: ${CLASHOO_COMMIT}
           GitHub Run Number: ${GITHUB_RUN_NUMBER}
           GitHub Run ID: ${GITHUB_RUN_ID}
           Runner: ubuntu-24.04
@@ -370,7 +368,9 @@ jobs:
           DUPLICATES="$(
             awk '
               /^CONFIG_[^=[:space:]]+=/ {
-                print $1
+                key=$1
+                sub(/=.*/, "", key)
+                print key
                 next
               }
               /^# CONFIG_[^[:space:]]+ is not set$/ {
@@ -510,7 +510,6 @@ jobs:
 
           # 以下配置属于 YAIF 构建策略明确禁止的项目。
           FORBIDDEN_CONFIGS="
-          CONFIG_PACKAGE_mihomo-alpha
           CONFIG_PACKAGE_luci-app-attendedsysupgrade
           CONFIG_PACKAGE_luci-i18n-attendedsysupgrade-zh-cn
           CONFIG_PACKAGE_firewall
@@ -629,12 +628,11 @@ jobs:
           check_config CONFIG_IPV6 y
 
           echo "=========================================="
-          echo "Nikki"
+          echo "Clashoo"
           echo "=========================================="
 
-          check_config CONFIG_PACKAGE_nikki y
-          check_config CONFIG_PACKAGE_luci-app-nikki y
-          check_config CONFIG_PACKAGE_luci-i18n-nikki-zh-cn y
+          check_config CONFIG_PACKAGE_clashoo y
+          check_config CONFIG_PACKAGE_luci-app-clashoo y
 
           echo "=========================================="
           echo "Daed"
@@ -653,7 +651,7 @@ jobs:
           check_disabled CONFIG_PACKAGE_firewall
 
           echo "=========================================="
-          echo "Nikki TUN / TProxy"
+          echo "TUN / TProxy 网络基础能力"
           echo "=========================================="
 
           check_config CONFIG_PACKAGE_kmod-tun y

@@ -1,16 +1,41 @@
 #!/bin/sh
 
+# =========================================================
+# ImmortalWrt APK Repository 修正
+#
+# 作用：
+#   1. 将 ImmortalWrt 官方 APK 镜像切换为 USTC
+#   2. 清理当前无实际内容的官方 video feed
+#
+# 说明：
+#   Clashoo 第三方 APK 源单独通过
+#   /etc/apk/repositories.d/customfeeds.list 提供，
+#   不在此处处理。
+# =========================================================
+
 REPO="/etc/apk/repositories.d/distfeeds.list"
 
 [ -f "$REPO" ] || exit 0
 
-grep -q "mirrors.vsean.net" "$REPO" || exit 0
+# ---------------------------------------------------------
+# 1. 官方 APK 镜像切换
+# ---------------------------------------------------------
+#
+# ImmortalWrt 默认大陆镜像稳定性不足，
+# 使用 USTC 作为官方 APK 软件源镜像。
+# ---------------------------------------------------------
 
 sed -i \
-    -e '/nikki.*packages\.adb/d' \
-    -e '/video.*packages\.adb/d' \
     -e 's#mirrors.vsean.net/immortalwrt#mirrors.ustc.edu.cn/immortalwrt#g' \
     -e 's#mirrors.vsean.net/openwrt#mirrors.ustc.edu.cn/immortalwrt#g' \
+    "$REPO"
+
+# ---------------------------------------------------------
+# 2. 清理当前无实际内容的 video feed
+# ---------------------------------------------------------
+
+sed -i \
+    -e '/video.*packages\.adb/d' \
     "$REPO"
 
 exit 0

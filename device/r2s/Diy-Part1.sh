@@ -1,48 +1,57 @@
-#!/bin/bash
-# =========================================================
-# DIY Script Part 1：追加第三方 Feeds 软件源
-#
-# 适用目标：
-#   FriendlyARM NanoPi R2S
-#   ImmortalWrt 25.12.1
-#
-# 原则：
-#   1. ImmortalWrt 官方 feeds 已提供的包，不重复添加第三方源。
-#   2. 仅追加确有必要且官方源未提供的组件。
-#   3. Nikki 作为本固件主代理组件，使用 Nikki 官方 OpenWrt feed。
-# =========================================================
+    #!/bin/bash
+    # =========================================================
+    # DIY Script Part 1：引入第三方软件包源码
+    #
+    # 适用目标：
+    #   FriendlyARM NanoPi R2S
+    #   ImmortalWrt 25.12.1
+    #
+    # 职责：
+    #   1. 引入 Clashoo 软件包源码
+    #
+    # 原则：
+    #   - ImmortalWrt 官方 feeds 已提供的软件包，不重复引入。
+    #   - Daed 使用 ImmortalWrt 官方 APK 软件源。
+    #   - Clashoo 按官方 OpenWrt 安装方式直接引入源码。
+    #   - 本脚本不修改 .config。
+    #   - 本脚本不负责 APK repository 配置。
+    #   - 本脚本不负责软件包选择。
+    # =========================================================
 
-set -euo pipefail
+    set -euo pipefail
 
-echo "==> [Diy-Part1] 开始检查并追加第三方 Feeds 软件源..."
+    echo "==> [Diy-Part1] 开始引入第三方软件包源码..."
 
-# ---------------------------------------------------------
-# 1. Nikki
-# ---------------------------------------------------------
-# Nikki 当前作为本固件的主代理组件。
-#
-# ImmortalWrt 官方 25.12.1 feeds 不作为当前 Nikki 来源，
-# 因此使用 Nikki 官方 OpenWrt feed。
-#
-# 固定使用 main 分支。
-# ---------------------------------------------------------
+    # ---------------------------------------------------------
+    # 1. Clashoo
+    # ---------------------------------------------------------
+    #
+    # Clashoo 官方仓库：
+    #   kenzok8/openwrt-clashoo
+    #
+    # 仓库包含：
+    #   - clashoo
+    #   - luci-app-clashoo
+    #
+    # 按 Clashoo 官方 OpenWrt 安装方式，
+    # 直接克隆到 package/openwrt-clashoo。
+    # ---------------------------------------------------------
 
-NIKKI_FEED='src-git nikki https://github.com/nikkinikki-org/OpenWrt-nikki.git;main'
+    CLASHOO_REPO="https://github.com/kenzok8/openwrt-clashoo.git"
+    CLASHOO_DIR="package/openwrt-clashoo"
 
-if grep -Fxq "$NIKKI_FEED" feeds.conf.default; then
-    echo "==> Nikki 官方软件源已存在，跳过追加。"
-else
-    # 如果存在旧的 nikki 定义，则先删除，
-    # 避免同名 feed 重复定义或指向错误版本。
-    if grep -Eq '^src-git nikki ' feeds.conf.default; then
-        echo "==> 检测到已有 Nikki 软件源定义，更新为官方 main 分支..."
-        sed -i '/^src-git nikki /d' feeds.conf.default
+    if [ -d "$CLASHOO_DIR/.git" ]; then
+        echo "==> Clashoo 源码目录已存在，跳过 clone。"
     else
-        echo "==> 未检测到 Nikki 软件源。"
+        if [ -e "$CLASHOO_DIR" ]; then
+            echo "ERROR：$CLASHOO_DIR 已存在，但不是 Git 仓库。"
+            echo "请检查该目录后重新执行。"
+            exit 1
+        fi
+
+        echo "==> 正在获取 Clashoo 官方源码..."
+        git clone "$CLASHOO_REPO" "$CLASHOO_DIR"
+        echo "==> Clashoo 源码引入完成。"
     fi
 
-    echo "==> 追加 Nikki 官方软件源（main 分支）..."
-    echo "$NIKKI_FEED" >> feeds.conf.default
-fi
-
-echo "==> [Diy-Part1] 第三方 Feeds 软件源处理完成。"
+    echo "==> [Diy-Part1] 第三方软件包源码处理完成。"
