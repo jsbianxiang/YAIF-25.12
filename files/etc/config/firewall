@@ -364,3 +364,25 @@ config rule
 	option target 'ACCEPT'
 
 
+config include 'zerotier_input'
+	option type 'nftables'
+	option path '/var/run/zerotier-one/_fw4/input.nft'
+	option position 'chain-pre'
+	option chain 'input'
+
+config include 'zerotier_srcnat'
+	option type 'nftables'
+	option path '/var/run/zerotier-one/_fw4/srcnat.nft'
+	option position 'chain-pre'
+	option chain 'srcnat'
+
+config include 'zerotier_forward'
+	option type 'nftables'
+	option path '/var/run/zerotier-one/_fw4/forward.nft'
+	option position 'chain-pre'
+	option chain 'forward'
+
+config include 'nikki'
+	option type 'script'
+	option path '/etc/nikki/scripts/firewall_include.sh'
+	option fw4_compatible '1'
