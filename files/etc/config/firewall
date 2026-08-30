@@ -32,6 +32,20 @@
 
 config defaults
 
+	### 常规设置 ###
+	
+	# 启用 SYN Flood 防护
+	option synflood_protect '1'
+
+	# 启用 丢弃 INVALID 状态连接
+	option drop_invalid '1'
+
+	# 启用 FullCone NAT
+	option fullcone '1'
+
+	# 启用 FullCone NAT6
+	option fullcone6 '1'
+
 	# 默认拒绝进入路由器的流量
 	option input 'REJECT'
 
@@ -41,36 +55,13 @@ config defaults
 	# 默认拒绝转发流量
 	option forward 'REJECT'
 
-	# 启用 FullCone NAT
-	#
-	# 适用于:
-	#   - P2P
-	#   - PT
-	#   - 部分需要主动入站映射的应用
-	option fullcone '1'
 
-	# 禁用 SYN Flood 防护
-	#
-	# 当前配置针对高连接数及 P2P / PT 环境。
-	option synflood_protect '0'
-
-	# 不主动丢弃 INVALID 状态连接
-	#
-	# 保持当前代理及复杂连接环境下的兼容性。
-	option drop_invalid '0'
+	### 路由/NAT 卸载 ###
 
 	# 软件流量分载
-	#
-	# 避免流量绕过:
-	#   - Mihomo TUN
-	#   - 策略路由
-	#   - 透明代理
-	#   - 防火墙拦截
 	option flow_offloading '0'
 
 	# 硬件流量分载
-	#
-	# 保持代理流量经过正常防火墙及策略路由路径。
 	option flow_offloading_hw '0'
 
 
@@ -373,17 +364,3 @@ config rule
 	option target 'ACCEPT'
 
 
-# =========================================================
-# 11. Nikki 防火墙集成
-#
-# Nikki 在此处调用自己的防火墙脚本，
-# 动态加入 Mihomo / 透明代理相关的 nftables 规则。
-#
-# 不建议将 Nikki 生成的规则直接手工写入本文件。
-#
-# =========================================================
-
-config include 'nikki'
-	option type 'script'
-	option path '/etc/nikki/scripts/firewall_include.sh'
-	option fw4_compatible '1'
