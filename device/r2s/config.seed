@@ -686,7 +686,7 @@ CONFIG_PACKAGE_kmod-sched-bpf=y
 
 # 由当前 Kconfig 自动派生：
 
-# 
+#
 
 # CONFIG_KERNEL_CGROUP_BPF
 
