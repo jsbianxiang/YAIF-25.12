@@ -455,7 +455,7 @@ jobs:
       - name: config.seed 逆向审查 SSH
         if: ${{ inputs.ssh == true }}
         timeout-minutes: 60
-        uses: mxschmitt/action-tmate@v3.22
+        uses: mxschmitt/action-tmate@v3
         with:
           connect-timeout-seconds: 180
 
