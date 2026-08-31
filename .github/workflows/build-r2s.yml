@@ -457,8 +457,6 @@ jobs:
         if: ${{ inputs.ssh == true }}
         timeout-minutes: 60
         uses: mxschmitt/action-tmate@v3.24
-        with:
-          limit-access-to-actor: true
 
       # =====================================================
       # 13. SSH 审查结束后的状态快照
