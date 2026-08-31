@@ -99,14 +99,14 @@ config dnsmasq
 	# 保留 dnsmasq 本地 DNS 缓存。
 	# Mihomo 负责代理 DNS，但 dnsmasq 仍承担本地 DNS
 	# 与 DHCP 主机名解析，因此不强制关闭缓存。
-	option cachesize '8000'
+	option cachesize '150'
 
 	# DNS 最小缓存时间
 	#
 	# 将短 TTL DNS 记录的缓存时间延长至 3600 秒。
 	#
 	# 保持 ImmortalWrt 25.12.1 官方默认行为。
-	option min_cache_ttl '3600'
+	option min_cache_ttl '60'
 
 	# 设置最大缓存时间
 	option max_cache_ttl '3600'
