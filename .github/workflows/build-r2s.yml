@@ -20,15 +20,30 @@ name: Build ImmortalWrt 25.12.1 for NanoPi R2S
 # 配置来源：
 #   device/r2s/config.seed
 #
+# 特别说明：
+#   当 workflow_dispatch 的 ssh=true 时，
+#   在 make defconfig 之后进入 SSH 调试环境。
+#
+#   该阶段专门用于：
+#   - 逆向审查 config.seed
+#   - 检查 .config 实际结果
+#   - 检查 Target / Device 默认配置
+#   - 检查软件包 Makefile / 依赖
+#   - 检查 Kconfig / kernel 配置
+#   - 使用 menuconfig 进行交互式验证
+#   - 生成 diffconfig
+#
+#   SSH 退出后，Workflow 才继续正式构建。
+#
 # =========================================================
 
 on:
   # 手动触发构建。
   workflow_dispatch:
     inputs:
-      # 是否开启 SSH 调试。
+      # 是否开启 SSH / config.seed 逆向审查。
       ssh:
-        description: "开启 SSH 调试"
+        description: "开启 SSH 调试 / config.seed 逆向审查"
         required: false
         type: boolean
         default: false
@@ -398,7 +413,110 @@ jobs:
           make defconfig
 
       # =====================================================
-      # 12. 验证 config.seed
+      # 12. config.seed 逆向审查 SSH
+      #
+      # 重要：
+      #   此阶段位于 make defconfig 之后。
+      #
+      #   SSH 中看到的是：
+      #
+      #     原始 config.seed
+      #             ↓
+      #        make defconfig
+      #             ↓
+      #          .config
+      #
+      #   因此可以反向判断：
+      #
+      #   1. seed 中哪些配置被保留
+      #   2. 哪些配置发生了变化
+      #   3. 哪些配置是 defconfig 自动补出的
+      #   4. 某个 CONFIG 是否真正存在
+      #   5. 某个软件包来自哪个 feed
+      #   6. 软件包 Makefile 的依赖关系
+      #   7. Target / Device 默认配置
+      #   8. kernel Kconfig 配置
+      #
+      #   如果在 SSH 中修改 .config：
+      #     退出 SSH 后后续验证会继续执行。
+      #
+      #   如果需要把交互结果写回 config.seed：
+      #     可以在 SSH 中运行：
+      #
+      #       ./scripts/diffconfig.sh
+      #
+      #   然后根据结果人工整理回：
+      #
+      #       ../device/r2s/config.seed
+      #
+      #   不自动覆盖 config.seed。
+      #
+      # =====================================================
+
+      - name: config.seed 逆向审查 SSH
+        if: ${{ inputs.ssh == true }}
+        timeout-minutes: 60
+        uses: mxschmitt/action-tmate@v3.24
+        with:
+          limit-access-to-actor: true
+
+      # =====================================================
+      # 13. SSH 审查结束后的状态快照
+      #
+      # 如果用户在 SSH 中修改了 .config，
+      # 这里记录修改后的结果。
+      #
+      # 注意：
+      #   不自动修改仓库中的 config.seed。
+      # =====================================================
+
+      - name: 保存 SSH 审查结果
+        if: ${{ inputs.ssh == true }}
+        run: |
+          set -euo pipefail
+
+          cd immortalwrt
+
+          echo "=========================================="
+          echo "SSH 审查结束"
+          echo "=========================================="
+
+          echo "===== 当前 Target / Device ====="
+          grep -E '^CONFIG_TARGET_(rockchip|rockchip_armv8)' .config || true
+
+          echo "===== 当前 NanoPi R2S 配置 ====="
+          grep -Ei 'nanopi-r2s|friendlyarm' .config || true
+
+          echo "===== 当前 config.seed diff ====="
+
+          bash ./scripts/diffconfig.sh \
+            > ../YAIF-R2S-ssh-diffconfig
+
+          cat ../YAIF-R2S-ssh-diffconfig
+
+          echo "===== seed 与 .config 对比 ====="
+
+          diff -u \
+            ../${CONFIG_SEED} \
+            .config \
+            > ../YAIF-R2S-seed-vs-final.diff || true
+
+          echo "===== 生成配置统计 ====="
+
+          echo "seed CONFIG 数量："
+          grep -E '^CONFIG_|^# CONFIG_' ../${CONFIG_SEED} | wc -l
+
+          echo ".config CONFIG 数量："
+          grep -E '^CONFIG_|^# CONFIG_' .config | wc -l
+
+          echo "===== SSH 审查结果文件 ====="
+
+          ls -lh \
+            ../YAIF-R2S-ssh-diffconfig \
+            ../YAIF-R2S-seed-vs-final.diff
+
+      # =====================================================
+      # 14. 验证 config.seed
       # =====================================================
 
       - name: 验证 config.seed 选择
@@ -495,7 +613,7 @@ jobs:
           echo "=========================================="
 
       # =====================================================
-      # 13. 检查 YAIF 禁止配置
+      # 15. 检查 YAIF 禁止配置
       # =====================================================
 
       - name: 检查禁止配置
@@ -539,7 +657,7 @@ jobs:
           echo "禁止配置检查：正常"
 
       # =====================================================
-      # 14. 验证最终配置
+      # 16. 验证最终配置
       # =====================================================
 
       - name: 验证最终配置
@@ -754,7 +872,7 @@ jobs:
           echo "=========================================="
 
       # =====================================================
-      # 15. 生成最终 diffconfig
+      # 17. 生成最终 diffconfig
       # =====================================================
 
       - name: 生成最终 diffconfig
@@ -772,7 +890,7 @@ jobs:
           cat ../YAIF-R2S-diffconfig
 
       # =====================================================
-      # 16. 保存构建状态
+      # 18. 保存构建状态
       # =====================================================
 
       - name: 保存构建状态
@@ -806,7 +924,7 @@ jobs:
             YAIF-feeds-runtime-dir.tar.gz
 
       # =====================================================
-      # 17. 上传构建状态
+      # 19. 上传构建状态
       # =====================================================
 
       - name: 上传构建状态
@@ -823,20 +941,11 @@ jobs:
             YAIF-feeds-runtime.conf
             YAIF-feeds-runtime-dir.tar.gz
             device/r2s/config.seed
+            YAIF-R2S-ssh-diffconfig
+            YAIF-R2S-seed-vs-final.diff
 
       # =====================================================
-      # 18. 可选 SSH 调试
-      # =====================================================
-
-      - name: 开启 SSH 调试
-        if: ${{ inputs.ssh == true }}
-        uses: mxschmitt/action-tmate@v3.24
-        timeout-minutes: 30
-        with:
-          limit-access-to-actor: true
-
-      # =====================================================
-      # 19. 下载所有源码
+      # 20. 下载所有源码
       # =====================================================
 
       - name: 下载源码
@@ -854,7 +963,7 @@ jobs:
             V=s
 
       # =====================================================
-      # 20. 编译固件
+      # 21. 编译固件
       # =====================================================
 
       - name: 编译 R2S 固件
@@ -879,7 +988,7 @@ jobs:
           echo "=========================================="
 
       # =====================================================
-      # 21. 验证固件输出
+      # 22. 验证固件输出
       # =====================================================
 
       - name: 验证固件输出
@@ -955,7 +1064,7 @@ jobs:
           echo "固件输出验证：正常"
 
       # =====================================================
-      # 22. 准备发布文件
+      # 23. 准备固件发布文件
       # =====================================================
 
       - name: 准备固件发布文件
@@ -1030,7 +1139,7 @@ jobs:
           echo "固件发布文件准备：正常"
 
       # =====================================================
-      # 23. 上传固件 Artifact
+      # 24. 上传固件 Artifact
       # =====================================================
 
       - name: 上传固件
@@ -1043,7 +1152,7 @@ jobs:
             release/*
 
       # =====================================================
-      # 24. 创建 GitHub Release
+      # 25. 创建 GitHub Release
       # =====================================================
 
       - name: 创建 GitHub Release
