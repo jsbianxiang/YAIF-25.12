@@ -16,825 +16,811 @@
 #   APK
 #
 # 代理架构：
-#   主代理：Nikki + Mihomo Meta
+#   主代理：Clashoo
+#          └─ Mihomo / Smart / Sing-box
+#
 #   备用代理：Daed
 #
 # 内核：
-#   Linux 6.12
+#   Linux 6.12.x
 #   BPF / BTF / CO-RE
 #
-# =========================================================
-# 配置优先级
-# =========================================================
+# 配置来源与处理原则
 #
-#   1. ImmortalWrt 25.12.1 官方 R2S / 官方软件包
-#   2. YAIF 核心配置
-#   3. YAOF 可选增强
+# 1. ImmortalWrt 25.12.1 官方 Target / Device Profile / Packages
+# 2. Clashoo 软件包
+# 3. 本 seed 的显式功能选择
 #
-# 发生冲突时：
-#   高优先级配置优先。
+# 最终配置由 Kconfig / package dependency / select / depends
+# 综合计算生成。
 #
-# 人工筛选规则：
-#
-#   CONFIG_xxx=y
-#       明确要求启用 / 安装。
-#
-#   CONFIG_xxx=n
-#       明确要求禁用 / 不安装。
-#
-#   # CONFIG_xxx is not set
-#       明确要求禁用 / 不安装。
-#
-# 注意：
-#   普通“不需要”的软件不主动写入禁用项，
-#   由 Kconfig / package dependency 决定。
-#
-#   但涉及构建行为、BPF/BTF、TLS backend、
-#   优化方式等功能性配置的禁用语法必须保留。
-#
+# 本 seed 仅对需要明确控制的功能进行人工声明。
+# 自动依赖项不重复人工展开。
 # =========================================================
 
-
 # =========================================================
-# 1. Target Architecture
+# 1. Target / Device Profile
 # =========================================================
 
+# Rockchip 目标平台
 CONFIG_TARGET_rockchip=y
-CONFIG_TARGET_rockchip_armv8=y
-CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r2s=y
 
+# ARMv8 / 64-bit 目标架构
+CONFIG_TARGET_rockchip_armv8=y
+
+# FriendlyARM NanoPi R2S
+# SoC：Rockchip RK3328
+CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r2s=y
 
 # =========================================================
 # 2. Firmware Layout
 # =========================================================
-#
-# 内核分区：
-#   64 MB
-#
-# RootFS 分区：
-#   1024 MB
-#
-# 同时生成 SquashFS 与 ext4 根文件系统。
-# =========================================================
 
+# 内核分区大小：64MB
 CONFIG_TARGET_KERNEL_PARTSIZE=64
+
+# RootFS 分区大小：1024MB
 CONFIG_TARGET_ROOTFS_PARTSIZE=1024
 
+# 生成 SquashFS 根文件系统镜像
 CONFIG_TARGET_ROOTFS_SQUASHFS=y
+
+# 生成 ext4 根文件系统镜像
 CONFIG_TARGET_ROOTFS_EXT4FS=y
 
+# 对生成的固件镜像使用 gzip 压缩
 CONFIG_TARGET_IMAGES_GZIP=y
-
 
 # =========================================================
 # 3. APK / Build Environment
 # =========================================================
 
+# 使用 APK 作为软件包管理器
 CONFIG_USE_APK=y
 
-# 保留完整 kernel module 构建能力。
-# 便于后续使用匹配的官方 R2S kmod 软件源按需安装。
+# 保留完整的 Kernel Module 构建选项
+#
+# 便于后续从匹配的官方 R2S 软件源按需安装 Kernel Module
 CONFIG_ALL_KMODS=y
 
-# 保留开发及工具链配置能力。
+# 启用开发配置选项
 CONFIG_DEVEL=y
-CONFIG_TOOLCHAINOPTS=y
 
+# 保留完整工具链配置能力
+CONFIG_TOOLCHAINOPTS=y
 
 # =========================================================
 # 4. Build / Debug Information
 # =========================================================
 
-# 不因 warning 直接导致 kernel build 失败。
+# 不将 Kernel Warning 视为构建错误
 # CONFIG_KERNEL_WERROR is not set
 
+# 设置 Kernel 构建信息中的主机域名
 CONFIG_KERNEL_BUILD_DOMAIN="buildhost"
+
+# 设置 Kernel 构建信息中的用户名
 CONFIG_KERNEL_BUILD_USER="builder"
 
-# 收集 kernel / module 调试符号。
+# 收集 Kernel 及 Kernel Module 调试信息
 CONFIG_COLLECT_KERNEL_DEBUG=y
 
-# 使用可复现调试信息。
+# 生成可复现的调试信息
 CONFIG_REPRODUCIBLE_DEBUG_INFO=y
-
 
 # =========================================================
 # 5. Toolchain / Compression
 # =========================================================
 
-# Zlib 优先性能。
+# Zlib 优先性能
 CONFIG_ZLIB_OPTIMIZE_SPEED=y
-
 
 # =========================================================
 # 6. Global Network
 # =========================================================
 
-# 启用 IPv6。
+# 启用 IPv6
 CONFIG_IPV6=y
 
-
 # =========================================================
-# 7. ImmortalWrt 25.12.1 Official / R2S Base
+# 7. Official Base System
 # =========================================================
 
+# APK OpenSSL 支持
 CONFIG_PACKAGE_apk-openssl=y
 
+# 基础系统文件
 CONFIG_PACKAGE_base-files=y
+
+# 块设备及挂载管理
 CONFIG_PACKAGE_block-mount=y
 
-# TLS 根证书。
+# TLS 根证书
 CONFIG_PACKAGE_ca-bundle=y
 CONFIG_PACKAGE_ca-certificates=y
 
-# ImmortalWrt 中文发行版默认设置。
+# ImmortalWrt 中文发行版默认设置
 CONFIG_PACKAGE_default-settings-chn=y
 
-# 完整版 dnsmasq。
+# 完整版 dnsmasq
 CONFIG_PACKAGE_dnsmasq-full=y
 
-# SSH。
-CONFIG_PACKAGE_dropbear=y
-
-# 磁盘 / 分区工具。
-CONFIG_PACKAGE_fdisk=y
-CONFIG_PACKAGE_partx-utils=y
-
-# 防火墙。
-CONFIG_PACKAGE_firewall4=y
+# 文件系统工具
 CONFIG_PACKAGE_fstools=y
 
-# libc / libgcc。
+# C 标准库及 GCC 运行时库
 CONFIG_PACKAGE_libc=y
 CONFIG_PACKAGE_libgcc=y
 
-# OpenSSL ustream。
+# OpenSSL ustream 支持
 CONFIG_PACKAGE_libustream-openssl=y
 
-# 系统日志。
+# 系统日志
 CONFIG_PACKAGE_logd=y
 
-# LuCI。
+# LuCI Web 管理界面
 CONFIG_PACKAGE_luci=y
 
-# MTD。
+# MTD 分区管理工具
 CONFIG_PACKAGE_mtd=y
 
-# 网络管理。
+# 网络接口管理
 CONFIG_PACKAGE_netifd=y
 
-# nftables JSON。
-CONFIG_PACKAGE_nftables-json=y
-
-# DHCPv6 / IPv6 RA。
+# DHCPv6 客户端及 IPv6 RA / DHCPv6 服务
 CONFIG_PACKAGE_odhcp6c=y
 CONFIG_PACKAGE_odhcpd-ipv6only=y
 
-# PPP / PPPoE。
+# PPP / PPPoE
 CONFIG_PACKAGE_ppp=y
 CONFIG_PACKAGE_ppp-mod-pppoe=y
 
-# procd jail。
+# procd 安全沙箱
 CONFIG_PACKAGE_procd-ujail=y
 
-# U-Boot 环境变量。
+# U-Boot 环境变量管理
 CONFIG_PACKAGE_uboot-envtools=y
 
-# UCI。
+# UCI 配置管理
 CONFIG_PACKAGE_uci=y
 
-# uclient-fetch。
+# uclient 下载工具
 CONFIG_PACKAGE_uclient-fetch=y
 
-# 官方 R2S 基线随机数支持。
+# 随机数初始化
 CONFIG_PACKAGE_urandom-seed=y
 CONFIG_PACKAGE_urngd=y
 
-
 # =========================================================
-# 8. R2S Network Hardware
+# 8. R2S Hardware / Platform
 # =========================================================
 
-# RTL8152 USB 网卡。
-CONFIG_PACKAGE_kmod-usb-net-rtl8152=y
-
-# RTL8152 固件。
+# RTL8152 / RTL8153 USB 网卡固件
 CONFIG_PACKAGE_r8152-firmware=y
 
-# RK3328 Trusted Firmware-A。
-CONFIG_PACKAGE_trusted-firmware-a-rk3328=y
-
-
-# =========================================================
-# 9. R2S Hardware / Platform
-# =========================================================
-
-# ARM 平台 autocore。
+# ARM 平台优化组件
 CONFIG_PACKAGE_autocore=y
 
-# PWM 风扇控制。
+# RK3328 Trusted Firmware-A
+CONFIG_PACKAGE_trusted-firmware-a-rk3328=y
+
+# PWM 风扇控制
 CONFIG_PACKAGE_kmod-hwmon-pwmfan=y
 
-
 # =========================================================
-# 10. LuCI Official Base
+# 9. User-selected Software
+#
+# 本区域仅放需要主动预装的软件包。
+#
+# 后续新增 / 删除软件时，优先修改本区域。
+#
+# 软件包来源：
+#   - ImmortalWrt 25.12.1 官方软件包 / R2S kmod
+#   - Clashoo 软件包
 # =========================================================
 
-# LuCI HTTPS。
+
+# ---------------------------------------------------------
+# LuCI Base / Compatibility / Theme
+# ---------------------------------------------------------
+
+# LuCI HTTPS 支持
 CONFIG_PACKAGE_luci-ssl=y
 
-# CPU 频率管理。
-CONFIG_PACKAGE_luci-app-cpufreq=y
-
-# 防火墙管理。
-CONFIG_PACKAGE_luci-app-firewall=y
-
-# APK 软件包管理器。
-CONFIG_PACKAGE_luci-app-package-manager=y
-
-# 官方 Bootstrap 主题。
-CONFIG_PACKAGE_luci-theme-bootstrap=y
-
-# LuCI 兼容层。
-CONFIG_PACKAGE_luci-compat=y
-
-
-# =========================================================
-# 11. LuCI Languages
-# =========================================================
-
-CONFIG_LUCI_LANG_zh_Hans=y
-CONFIG_LUCI_LANG_en=y
-
-# 不启用 CSS tidy。
-# CONFIG_LUCI_CSSTIDY is not set
-
-# 不启用 JS 压缩器。
-# CONFIG_LUCI_JSMIN is not set
-
-
-# =========================================================
-# 12. LuCI Chinese / Firmware Generator Entry
-# =========================================================
-#
-# 中文翻译包作为明确的 LuCI 中文界面入口。
-#
-# 通过 package dependency 自动拉取对应主应用及依赖。
-# =========================================================
-
-# LuCI 基础中文。
-CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
-
-# CPUFreq 中文。
-CONFIG_PACKAGE_luci-i18n-cpufreq-zh-cn=y
-
-# Firewall 中文。
-CONFIG_PACKAGE_luci-i18n-firewall-zh-cn=y
-
-# APK Package Manager 中文。
-CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn=y
-
-# Argon 配置器及中文。
+# Argon 主题
+CONFIG_PACKAGE_luci-theme-argon=y
 CONFIG_PACKAGE_luci-app-argon-config=y
 CONFIG_PACKAGE_luci-i18n-argon-config-zh-cn=y
 
-# Daed 中文。
-CONFIG_PACKAGE_luci-i18n-daed-zh-cn=y
+# Bootstrap 主题
+CONFIG_PACKAGE_luci-theme-bootstrap=y
 
-# Filebrowser 中文。
-CONFIG_PACKAGE_luci-i18n-filebrowser-zh-cn=y
+# LuCI 兼容组件
+CONFIG_PACKAGE_luci-compat=y
 
-# Ramfree 中文入口。
-CONFIG_PACKAGE_luci-i18n-ramfree-zh-cn=y
 
-# Tailscale Community 中文入口。
-CONFIG_PACKAGE_luci-i18n-tailscale-community-zh-cn=y
+# ---------------------------------------------------------
+# LuCI Applications / Chinese
+# ---------------------------------------------------------
 
-# ttyd 中文入口。
+# CPU 频率管理
+CONFIG_PACKAGE_luci-app-cpufreq=y
+CONFIG_PACKAGE_luci-i18n-cpufreq-zh-cn=y
+
+# Firewall4 管理界面
+CONFIG_PACKAGE_luci-app-firewall=y
+CONFIG_PACKAGE_luci-i18n-firewall-zh-cn=y
+
+# APK 软件包管理
+CONFIG_PACKAGE_luci-app-package-manager=y
+CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn=y
+
+# Filebrowser：不启用
+# CONFIG_PACKAGE_luci-app-filebrowser=y
+# CONFIG_PACKAGE_luci-i18n-filebrowser-zh-cn=y
+
+# Ramfree：不启用
+# CONFIG_PACKAGE_luci-app-ramfree=y
+# CONFIG_PACKAGE_luci-i18n-ramfree-zh-cn=y
+
+# Tailscale Community：不启用
+# CONFIG_PACKAGE_luci-app-tailscale-community=y
+# CONFIG_PACKAGE_luci-i18n-tailscale-community-zh-cn=y
+
+# ttyd Web 终端
+CONFIG_PACKAGE_luci-app-ttyd=y
 CONFIG_PACKAGE_luci-i18n-ttyd-zh-cn=y
 
-# UPnP 中文。
+# UPnP
+CONFIG_PACKAGE_luci-app-upnp=y
 CONFIG_PACKAGE_luci-i18n-upnp-zh-cn=y
 
-# VLMCSd 中文入口。
-CONFIG_PACKAGE_luci-i18n-vlmcsd-zh-cn=y
+# VLMCSd：不启用
+# CONFIG_PACKAGE_luci-app-vlmcsd=y
+# CONFIG_PACKAGE_luci-i18n-vlmcsd-zh-cn=y
+
+# LuCI 简体中文
+CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
 
 
-# =========================================================
-# 13. Attended Sysupgrade
-# =========================================================
+# ---------------------------------------------------------
+# Proxy
+# ---------------------------------------------------------
 #
-# 本固件采用自维护编译与升级流程，不使用 ASU。
-# =========================================================
-
-
-# =========================================================
-# 14. DNS
-# =========================================================
-
-# dnsmasq-full IPSet 支持。
-CONFIG_PACKAGE_dnsmasq_full_ipset=y
-
-
-# =========================================================
-# 15. IPv6
-# =========================================================
+# 主代理：Clashoo
 #
-# IPv6 内核能力由 CONFIG_IPV6=y 提供。
+# Clashoo 提供统一的代理管理与 LuCI 管理界面。
 #
-# 不使用不存在于当前官方 25.12.1 / Nikki 来源模型中的
-# ipv6helper package。
-# =========================================================
-
-
-# =========================================================
-# 16. Firewall / nftables Compatibility
-# =========================================================
-
-# Legacy firewall 禁用。
-# CONFIG_PACKAGE_firewall is not set
-
-# ARP → nft。
-CONFIG_PACKAGE_arptables-nft=y
-
-# ebtables → nft。
-CONFIG_PACKAGE_ebtables-nft=y
-
-# ip6tables → nft。
-CONFIG_PACKAGE_ip6tables-nft=y
-
-# xtables → nft。
-CONFIG_PACKAGE_xtables-nft=y
-
-# iptables → nft。
-CONFIG_PACKAGE_iptables-nft=y
-
-# iptables 兼容模块。
-CONFIG_PACKAGE_iptables-mod-conntrack-extra=y
-CONFIG_PACKAGE_iptables-mod-iprange=y
-CONFIG_PACKAGE_iptables-mod-nat-extra=y
-CONFIG_PACKAGE_iptables-mod-socket=y
-CONFIG_PACKAGE_iptables-mod-tproxy=y
-
-
-# =========================================================
-# 17. nft Flow Offload
-# =========================================================
+# 支持多种代理内核：
+#   - Mihomo Stable
+#   - Mihomo Alpha
+#   - Mihomo Smart
+#   - Sing-box
 #
-# 保留官方 nft Flow Offload 能力。
+# 代理内核不在 config.seed 中固定。
+# 由 Clashoo 根据实际使用需求进行安装与管理。
 #
-# 运行时是否启用：
-#   flow_offloading
-#   flow_offloading_hw
+# 因此不在 seed 中主动指定：
+#   - mihomo-meta
+#   - mihomo-alpha
+#   - sing-box
 #
-# 由 firewall4 配置决定，不由本 seed 决定。
-# =========================================================
 
-CONFIG_PACKAGE_kmod-nf-flow=y
-CONFIG_PACKAGE_kmod-nft-offload=y
+CONFIG_PACKAGE_clashoo=y
+CONFIG_PACKAGE_luci-app-clashoo=y
+CONFIG_PACKAGE_luci-i18n-clashoo-zh-cn=y
 
-
-# =========================================================
-# 18. Transparent Proxy / TUN / TProxy / FullCone
-# =========================================================
-
-# TUN。
-CONFIG_PACKAGE_kmod-tun=y
-
-# Dummy interface。
-CONFIG_PACKAGE_kmod-dummy=y
-
-# 网络连接诊断。
-CONFIG_PACKAGE_kmod-inet-diag=y
-
-# nft socket。
-CONFIG_PACKAGE_kmod-nft-socket=y
-
-# nft TProxy。
-CONFIG_PACKAGE_kmod-nft-tproxy=y
-
-# conntrack。
-CONFIG_PACKAGE_kmod-nf-conntrack=y
-CONFIG_PACKAGE_kmod-nf-conntrack-netlink=y
-CONFIG_PACKAGE_kmod-nf-conntrack6=y
-
-# NAT。
-CONFIG_PACKAGE_kmod-nf-nat=y
-CONFIG_PACKAGE_kmod-nf-nathelper=y
-CONFIG_PACKAGE_kmod-nf-nathelper-extra=y
-
-# nft NAT。
-CONFIG_PACKAGE_kmod-nft-nat=y
-
-# FullCone NAT。
-CONFIG_PACKAGE_kmod-nft-fullcone=y
-
-
-# =========================================================
-# 19. UPnP / NAT
-# =========================================================
-
-CONFIG_PACKAGE_miniupnpd-nftables=y
-CONFIG_PACKAGE_luci-app-upnp=y
-
-# Legacy iptables miniupnpd 不使用。
-# CONFIG_PACKAGE_miniupnpd-iptables is not set
-
-
-# =========================================================
-# 20. Nikki + Mihomo Meta
+# ---------------------------------------------------------
+# Backup Proxy
+# ---------------------------------------------------------
 #
-# 主代理。
-# =========================================================
-
-CONFIG_PACKAGE_nikki=y
-CONFIG_PACKAGE_mihomo-meta=y
-
-CONFIG_PACKAGE_luci-app-nikki=y
-CONFIG_PACKAGE_luci-i18n-nikki-zh-cn=y
-
-
-# =========================================================
-# 21. Daed
+# Daed 作为备用代理方案保留。
 #
-# 备用代理。
-# =========================================================
+# Clashoo 与 Daed 不同时承担透明代理职责。
+# 使用 Daed 时由用户手动切换代理服务。
+#
 
 CONFIG_PACKAGE_daed=y
 CONFIG_PACKAGE_luci-app-daed=y
 CONFIG_PACKAGE_luci-i18n-daed-zh-cn=y
 
-# Daed Geo 数据。
-CONFIG_PACKAGE_daed-geoip=y
-CONFIG_PACKAGE_daed-geosite=y
-
-# Daed 使用内核 BTF。
-CONFIG_DAED_USE_KERNEL_BTF=y
-
-
-# =========================================================
-# 22. BPF / BTF / eBPF / CO-RE
-# =========================================================
+# GeoData 由 Daed 依赖关系自动处理。
 #
-# 用途：
-#   eBPF
-#   BTF
-#   CO-RE
-#   Daed 内核 BTF
-#   内核 / 网络调试
-# =========================================================
-
-# Host 端 BPF toolchain。
-CONFIG_BPF_TOOLCHAIN_HOST=y
-
-CONFIG_PACKAGE_bpftool-full=y
-
-# -------------------------
-# BPF Core
-# -------------------------
-
-CONFIG_KERNEL_BPF=y
-CONFIG_KERNEL_BPF_SYSCALL=y
-CONFIG_KERNEL_BPF_JIT=y
-CONFIG_KERNEL_BPF_STREAM_PARSER=y
+# 不在 seed 中主动指定：
+#   - daed-geoip
+#   - daed-geosite
+#   - v2ray-geoip
+#   - v2ray-geosite
 
 
-# -------------------------
-# Debug Information / BTF
-# -------------------------
+# ---------------------------------------------------------
+# Network / VPN / Overlay
+# ---------------------------------------------------------
 
-CONFIG_KERNEL_DEBUG_INFO=y
-
-# 不减少调试信息。
-#
-# 保证需要完整 debug information 的工具具有可用数据。
-# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set
-
-CONFIG_KERNEL_DEBUG_INFO_BTF=y
-CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y
-
-# 允许模块 BTF 信息存在 mismatch 时继续加载。
-CONFIG_KERNEL_MODULE_ALLOW_BTF_MISMATCH=y
-
-
-# -------------------------
-# BTF Generator
-# -------------------------
-
-CONFIG_DWARVES=y
-
-
-# -------------------------
-# eBPF Runtime
-# -------------------------
-
-CONFIG_KERNEL_CGROUPS=y
-
-CONFIG_KERNEL_KPROBES=y
-CONFIG_KERNEL_KPROBE_EVENTS=y
-
-CONFIG_KERNEL_BPF_EVENTS=y
-
-
-# -------------------------
-# TC BPF
-# -------------------------
-
-CONFIG_KERNEL_NET_SCHED=y
-CONFIG_KERNEL_NET_CLS_BPF=y
-CONFIG_KERNEL_NET_CLS_ACT=y
-CONFIG_KERNEL_NET_SCH_INGRESS=y
-
-
-# -------------------------
-# Advanced BPF
-# -------------------------
-
-CONFIG_KERNEL_NETKIT=y
-CONFIG_KERNEL_XDP_SOCKETS=y
-
-
-# -------------------------
-# BPF Diagnostics
-# -------------------------
-
-CONFIG_PACKAGE_kmod-xdp-sockets-diag=y
-
-
-# =========================================================
-# 23. Kernel Debugging
-# =========================================================
-#
-# 保留轻量级调试能力。
-# =========================================================
-
-CONFIG_KERNEL_DEBUG_FS=y
-CONFIG_KERNEL_KALLSYMS=y
-CONFIG_KERNEL_PERF_EVENTS=y
-
-
-# =========================================================
-# 24. Kernel Performance
-# =========================================================
-
-# 优先性能。
-CONFIG_KERNEL_CC_OPTIMIZE_FOR_PERFORMANCE=y
-
-# 不使用 size 优化。
-# CONFIG_KERNEL_CC_OPTIMIZE_FOR_SIZE is not set
-
-
-# =========================================================
-# 25. BBR
-# =========================================================
-#
-# 已经过实际测试确认有效。
-# =========================================================
-
-CONFIG_PACKAGE_kmod-tcp-bbr=y
-
-
-# =========================================================
-# 26. ZRAM
-#
-# YAOF 可选增强。
-# =========================================================
-
-CONFIG_PACKAGE_zram-swap=y
-
-CONFIG_PACKAGE_kmod-lib-lz4=y
-CONFIG_PACKAGE_kmod-lib-lzo=y
-CONFIG_PACKAGE_kmod-lib-zstd=y
-
-# =========================================================
-# 28. WireGuard
-# =========================================================
-
+# WireGuard LuCI 协议支持
 CONFIG_PACKAGE_luci-proto-wireguard=y
 
 
-# =========================================================
-# 29. DDNS
-# =========================================================
-
+# DDNS
 CONFIG_PACKAGE_luci-app-ddns=y
-
+CONFIG_PACKAGE_luci-i18n-ddns-zh-cn=y
 CONFIG_PACKAGE_ddns-scripts=y
 CONFIG_PACKAGE_ddns-scripts-cloudflare=y
 CONFIG_PACKAGE_ddns-scripts-dnspod=y
 CONFIG_PACKAGE_ddns-scripts-services=y
 CONFIG_PACKAGE_ddns-scripts-aliyun=y
 
+# FRPC：不启用
+# CONFIG_PACKAGE_frpc=y
+# CONFIG_PACKAGE_luci-app-frpc=y
+# CONFIG_PACKAGE_luci-i18n-frpc-zh-cn=y
 
-# =========================================================
-# 30. FRP
-# =========================================================
-
-# FRPC 客户端。
-CONFIG_PACKAGE_frpc=y
-CONFIG_PACKAGE_luci-app-frpc=y
-
-
-# =========================================================
-# 31. ZeroTier
-# =========================================================
-
+# ZeroTier
 CONFIG_PACKAGE_zerotier=y
 CONFIG_PACKAGE_luci-app-zerotier=y
+CONFIG_PACKAGE_luci-i18n-zerotier-zh-cn=y
 
-
-# =========================================================
-# 32. CPU / System Management
-# =========================================================
-
+# Watchcat
 CONFIG_PACKAGE_luci-app-watchcat=y
+CONFIG_PACKAGE_luci-i18n-watchcat-zh-cn=y
 
 
-# =========================================================
-# 33. USB Storage
-# =========================================================
-#
-# 用途：
-#   TF/SD：
-#     系统 / 低频写入
-#
-#   USB SSD / U盘：
-#     高频数据 / 外部存储
-# =========================================================
+# ---------------------------------------------------------
+# DNS / Diagnostics
+# ---------------------------------------------------------
 
-# USB 控制器。
-CONFIG_PACKAGE_kmod-usb2=y
-CONFIG_PACKAGE_kmod-usb3=y
+# dnsmasq-full IPSet 支持
+CONFIG_PACKAGE_dnsmasq_full_ipset=y
 
-# USB 存储。
-CONFIG_PACKAGE_kmod-usb-storage=y
-CONFIG_PACKAGE_kmod-usb-storage-extras=y
-CONFIG_PACKAGE_kmod-usb-storage-uas=y
-
-# SCSI。
-CONFIG_PACKAGE_kmod-scsi-core=y
-CONFIG_PACKAGE_kmod-scsi-generic=y
-
-
-# 文件系统。
-CONFIG_PACKAGE_kmod-fs-ext4=y
-CONFIG_PACKAGE_kmod-fs-f2fs=y
-CONFIG_PACKAGE_kmod-fs-exfat=y
-CONFIG_PACKAGE_kmod-fs-ntfs3=y
-CONFIG_PACKAGE_kmod-fs-vfat=y
-
-# FUSE。
-CONFIG_PACKAGE_kmod-fuse=y
-
-
-# 自动挂载。
-CONFIG_PACKAGE_automount=y
-
-
-# 存储维护工具。
-CONFIG_PACKAGE_mkf2fs=y
-CONFIG_PACKAGE_ntfs3-mount=y
-
-# USB 设备工具。
-CONFIG_PACKAGE_usbutils=y
-
-
-# =========================================================
-# 34. USB Network / Mobile Device Support
-# =========================================================
-
-# iPhone / iPad 以及相关 USB 设备支持。
-CONFIG_PACKAGE_usbmuxd=y
-CONFIG_PACKAGE_kmod-usb-net-ipheth=y
-
-# Android / 手机 USB 网络共享。
-CONFIG_PACKAGE_kmod-usb-net-rndis=y
-
-
-# =========================================================
-# 35. HTTPS / TLS / Configuration Tools
-# =========================================================
-
-CONFIG_PACKAGE_curl=y
-CONFIG_PACKAGE_libcurl=y
-
-# libcurl 使用 OpenSSL。
-CONFIG_LIBCURL_OPENSSL=y
-
-# 明确排除其他 TLS backend。
-# CONFIG_LIBCURL_MBEDTLS is not set
-# CONFIG_LIBCURL_WOLFSSL is not set
-# CONFIG_LIBCURL_GNUTLS is not set
-# CONFIG_LIBCURL_NOSSL is not set
-
-# HTTPS wget。
-CONFIG_PACKAGE_wget-ssl=y
-
-# YAML 配置处理工具。
-CONFIG_PACKAGE_yq=y
-
-
-# =========================================================
-# 36. OpenSSL
-# =========================================================
-
-# OpenSSL Engine。
-CONFIG_OPENSSL_ENGINE=y
-
-# 优先性能。
-CONFIG_OPENSSL_OPTIMIZE_SPEED=y
-
-# ARM64 汇编优化。
-CONFIG_OPENSSL_WITH_ASM=y
-
-# 保留错误信息，方便调试。
-CONFIG_OPENSSL_WITH_ERROR_MESSAGES=y
-
-# OpenSSL 配置。
-CONFIG_PACKAGE_libopenssl-conf=y
-
-# Legacy Provider。
-CONFIG_PACKAGE_libopenssl-legacy=y
-
-# 当前设计不需要 devcrypto。
-# CONFIG_PACKAGE_libopenssl-devcrypto is not set
-
-
-# =========================================================
-# 37. Crypto Kernel Modules
-#
-# 官方 R2S 25.12.1 成品中的基础 crypto 模块。
-# =========================================================
-
-CONFIG_PACKAGE_kmod-crypto-aead=y
-CONFIG_PACKAGE_kmod-crypto-arc4=y
-CONFIG_PACKAGE_kmod-crypto-crc32c=y
-CONFIG_PACKAGE_kmod-crypto-ecb=y
-CONFIG_PACKAGE_kmod-crypto-hash=y
-CONFIG_PACKAGE_kmod-crypto-hmac=y
-CONFIG_PACKAGE_kmod-crypto-manager=y
-CONFIG_PACKAGE_kmod-crypto-null=y
-CONFIG_PACKAGE_kmod-crypto-rng=y
-CONFIG_PACKAGE_kmod-crypto-sha1=y
-CONFIG_PACKAGE_kmod-crypto-sha3=y
-CONFIG_PACKAGE_kmod-crypto-sha512=y
-CONFIG_PACKAGE_kmod-crypto-user=y
-
-
-# =========================================================
-# 38. DNS / IP Diagnostics
-# =========================================================
-
+# DNS 查询 / 解析诊断工具
 CONFIG_PACKAGE_bind-tools=y
 CONFIG_PACKAGE_ip-full=y
 CONFIG_PACKAGE_resolveip=y
 
 
-# =========================================================
-# 39. Network Diagnostics
-# =========================================================
+# ---------------------------------------------------------
+# Diagnostics / Utilities
+# ---------------------------------------------------------
 
-# 网络抓包。
 CONFIG_PACKAGE_tcpdump=y
-
-# 路由 / 网络质量诊断。
-CONFIG_PACKAGE_mtr=y
-
-# 吞吐测试。
 CONFIG_PACKAGE_iperf3=y
-
-# conntrack 调试。
 CONFIG_PACKAGE_conntrack=y
-
-# 网卡 / PHY 诊断。
 CONFIG_PACKAGE_ethtool=y
-
-
-# =========================================================
-# 40. Process / System Diagnostics
-# =========================================================
-
 CONFIG_PACKAGE_htop=y
-
-
-# =========================================================
-# 41. SSH / Remote Management
-# =========================================================
-
-CONFIG_PACKAGE_dropbear=y
 CONFIG_PACKAGE_openssh-sftp-server=y
-
-
-# =========================================================
-# 42. Time Service
-# =========================================================
-
 CONFIG_PACKAGE_ntp-utils=y
-
-
-# =========================================================
-# 43. Additional Maintenance / Diagnostics
-# =========================================================
-
-# 二维码生成工具。
 CONFIG_PACKAGE_qrencode=y
+
+
+# ---------------------------------------------------------
+# HTTPS / TLS / Configuration Tools
+# ---------------------------------------------------------
+
+CONFIG_PACKAGE_curl=y
+CONFIG_PACKAGE_libcurl=y
+CONFIG_PACKAGE_wget-ssl=y
+CONFIG_PACKAGE_yq=y
+
+
+# ---------------------------------------------------------
+# OpenSSL
+# ---------------------------------------------------------
+
+CONFIG_PACKAGE_libopenssl-conf=y
+CONFIG_PACKAGE_libopenssl-legacy=y
+
+# 不使用 OpenSSL devcrypto
+# CONFIG_PACKAGE_libopenssl-devcrypto is not set
+
+# =========================================================
+# 10. Firewall / nftables / NAT
+# =========================================================
+
+
+# ---------------------------------------------------------
+# Firewall4 Core
+# ---------------------------------------------------------
+
+# OpenWrt Firewall4
+CONFIG_PACKAGE_firewall4=y
+
+# nftables JSON 支持
+CONFIG_PACKAGE_nftables-json=y
+
+# 禁用传统 Firewall3
+# CONFIG_PACKAGE_firewall is not set
+
+
+# ---------------------------------------------------------
+# Transparent Proxy / TUN / TProxy
+# ---------------------------------------------------------
+#
+# 为透明代理提供基础 Kernel 能力。
+#
+# 实际使用的代理模式由 Clashoo 或其他代理软件的运行配置决定。
+#
+# 支持：
+#   - TUN
+#   - TProxy
+#   - nftables Socket
+#   - Dummy Interface
+#   - Network Diagnostics
+#
+
+# TUN
+CONFIG_PACKAGE_kmod-tun=y
+
+# Dummy 网络接口
+CONFIG_PACKAGE_kmod-dummy=y
+
+# Internet Protocol Diagnostics
+CONFIG_PACKAGE_kmod-inet-diag=y
+
+# nftables Socket
+CONFIG_PACKAGE_kmod-nft-socket=y
+
+# nftables TProxy
+CONFIG_PACKAGE_kmod-nft-tproxy=y
+
+
+# ---------------------------------------------------------
+# IPv6 / Connection Tracking
+# ---------------------------------------------------------
+
+# IPv6 Connection Tracking
+CONFIG_PACKAGE_kmod-nf-conntrack6=y
+
+# Connection Tracking Netlink
+CONFIG_PACKAGE_kmod-nf-conntrack-netlink=y
+
+
+# ---------------------------------------------------------
+# FullCone NAT
+# ---------------------------------------------------------
+
+# nftables FullCone NAT
+CONFIG_PACKAGE_kmod-nft-fullcone=y
+
+
+# ---------------------------------------------------------
+# Flow Offload
+# ---------------------------------------------------------
+#
+# 保留 Kernel / nftables Flow Offload 支持。
+# 是否启用由运行时 Firewall 配置决定。
+#
+
+CONFIG_PACKAGE_kmod-nft-offload=y
+
+
+# ---------------------------------------------------------
+# nftables Compatibility
+# ---------------------------------------------------------
+#
+# 提供基于 nftables 的 iptables / arptables / ebtables
+# 兼容层。
+#
+# 用于第三方软件、现有脚本及兼容性需求。
+#
+
+CONFIG_PACKAGE_iptables-nft=y
+CONFIG_PACKAGE_ip6tables-nft=y
+CONFIG_PACKAGE_arptables-nft=y
+CONFIG_PACKAGE_ebtables-nft=y
+
+
+# ---------------------------------------------------------
+# Legacy Backend
+# ---------------------------------------------------------
+#
+# 不使用 Legacy iptables / arptables / ebtables 后端。
+#
+
+# CONFIG_PACKAGE_arptables-legacy is not set
+# CONFIG_PACKAGE_ebtables-legacy is not set
+# CONFIG_PACKAGE_ip6tables-legacy is not set
+# CONFIG_PACKAGE_xtables-legacy is not set
+# CONFIG_PACKAGE_iptables-legacy is not set
+
+
+# ---------------------------------------------------------
+# iptables Compatibility Extensions
+# ---------------------------------------------------------
+
+CONFIG_PACKAGE_iptables-mod-conntrack-extra=y
+CONFIG_PACKAGE_iptables-mod-iprange=y
+CONFIG_PACKAGE_iptables-mod-socket=y
+CONFIG_PACKAGE_iptables-mod-tproxy=y
+
+
+# ---------------------------------------------------------
+# UPnP Backend
+# ---------------------------------------------------------
+
+# miniupnpd nftables 后端
+CONFIG_PACKAGE_miniupnpd-nftables=y
+
+# 不使用 miniupnpd iptables 后端
+# CONFIG_PACKAGE_miniupnpd-iptables is not set
+
+# =========================================================
+# 11. BPF / BTF / eBPF / CO-RE
+# =========================================================
+#
+# 用于：
+#   - eBPF
+#   - BPF tracing
+#   - BPF stream parser
+#   - BTF
+#   - CO-RE
+#   - XDP / AF_XDP
+#   - Netkit
+#   - 内核 / 网络调试
+#
+# 以 ImmortalWrt 25.12.1 当前 R2S / Rockchip ARMv8
+# Kconfig 为准。
+#
+# 由 Kconfig 自动派生的子项不重复人工指定。
+# =========================================================
+
+# Host BPF toolchain
+CONFIG_BPF_TOOLCHAIN_HOST=y
+
+# BTF 生成工具
+CONFIG_DWARVES=y
+
+# BPF Events / Tracing
+CONFIG_KERNEL_BPF_EVENTS=y
+CONFIG_KERNEL_BPF_STREAM_PARSER=y
+
+# Kernel Control Groups
+CONFIG_KERNEL_CGROUPS=y
+
+# Kernel Kprobes
+CONFIG_KERNEL_KPROBES=y
+
+# Netkit / XDP
+CONFIG_KERNEL_NETKIT=y
+CONFIG_KERNEL_XDP_SOCKETS=y
+
+# Kernel Debug Information
+CONFIG_KERNEL_DEBUG_INFO=y
+
+# 不减少 Kernel Debug Information
+# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set
+
+# Kernel BTF
+CONFIG_KERNEL_DEBUG_INFO_BTF=y
+
+# 允许 Kernel Module BTF 不匹配时继续加载
+CONFIG_KERNEL_MODULE_ALLOW_BTF_MISMATCH=y
+
+# XDP Socket 诊断
+CONFIG_PACKAGE_kmod-xdp-sockets-diag=y
+
+# TC BPF
+CONFIG_PACKAGE_kmod-sched-bpf=y
+
+# ---------------------------------------------------------
+# Kconfig 自动派生
+# ---------------------------------------------------------
+#
+# 以下选项由相关 Kconfig 依赖自动启用，
+# 不在 seed 中重复指定：
+#
+# CONFIG_KERNEL_CGROUP_BPF
+# CONFIG_KERNEL_KPROBE_EVENTS
+# CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES
+
+# =========================================================
+# 12. Kernel Debugging
+# =========================================================
+
+# DebugFS：提供内核调试接口。
+CONFIG_KERNEL_DEBUG_FS=y
+
+# Kallsyms：保留内核符号信息，便于故障定位与调试。
+CONFIG_KERNEL_KALLSYMS=y
+
+# Perf Events：提供内核性能分析与 profiling 能力。
+CONFIG_KERNEL_PERF_EVENTS=y
+
+# =========================================================
+# 13. Kernel Performance
+# =========================================================
+
+# 内核编译优化：优先性能。
+CONFIG_KERNEL_CC_OPTIMIZE_FOR_PERFORMANCE=y
+
+# 不采用针对固件体积的 size 优化。
+# CONFIG_KERNEL_CC_OPTIMIZE_FOR_SIZE is not set
+
+# =========================================================
+# 14. BBR
+# =========================================================
+
+# TCP BBR 拥塞控制模块。
+CONFIG_PACKAGE_kmod-tcp-bbr=y
+
+# =========================================================
+# 15. ZRAM
+# =========================================================
+
+# ZRAM：提供压缩内存交换。
+CONFIG_PACKAGE_zram-swap=y
+
+# ZRAM 可用的压缩算法模块。
+CONFIG_PACKAGE_kmod-lib-lz4=y
+CONFIG_PACKAGE_kmod-lib-lzo=y
+CONFIG_PACKAGE_kmod-lib-zstd=y
+
+# =========================================================
+# 16. USB / Storage / Filesystem
+# =========================================================
+
+# ---------------------------------------------------------
+# USB Host
+# ---------------------------------------------------------
+
+# USB 2.0 Host 控制器。
+CONFIG_PACKAGE_kmod-usb2=y
+
+# USB 3.x Host 控制器。
+CONFIG_PACKAGE_kmod-usb3=y
+
+# ---------------------------------------------------------
+# USB Mass Storage / UAS
+# ---------------------------------------------------------
+
+# USB 大容量存储设备。
+CONFIG_PACKAGE_kmod-usb-storage=y
+
+# USB 存储设备扩展驱动。
+CONFIG_PACKAGE_kmod-usb-storage-extras=y
+
+# USB Attached SCSI（UAS）。
+CONFIG_PACKAGE_kmod-usb-storage-uas=y
+
+# ---------------------------------------------------------
+# SCSI
+# ---------------------------------------------------------
+
+# SCSI 核心支持。
+CONFIG_PACKAGE_kmod-scsi-core=y
+
+# SCSI Generic 接口。
+CONFIG_PACKAGE_kmod-scsi-generic=y
+
+# ---------------------------------------------------------
+# Filesystems
+# ---------------------------------------------------------
+
+# EXT4 文件系统。
+CONFIG_PACKAGE_kmod-fs-ext4=y
+
+# F2FS 文件系统。
+CONFIG_PACKAGE_kmod-fs-f2fs=y
+
+# exFAT 文件系统。
+CONFIG_PACKAGE_kmod-fs-exfat=y
+
+# NTFS3 文件系统。
+CONFIG_PACKAGE_kmod-fs-ntfs3=y
+
+# VFAT 文件系统。
+CONFIG_PACKAGE_kmod-fs-vfat=y
+
+# FUSE 用户态文件系统接口。
+CONFIG_PACKAGE_kmod-fuse=y
+
+# ---------------------------------------------------------
+# Storage Management
+# ---------------------------------------------------------
+
+# 自动挂载存储设备。
+CONFIG_PACKAGE_automount=y
+
+# 磁盘分区工具。
+CONFIG_PACKAGE_fdisk=y
+
+# 分区设备映射工具。
+CONFIG_PACKAGE_partx-utils=y
+
+# F2FS 文件系统创建工具。
+CONFIG_PACKAGE_mkf2fs=y
+
+# NTFS3 挂载工具。
+CONFIG_PACKAGE_ntfs3-mount=y
+
+# USB 设备信息工具。
+CONFIG_PACKAGE_usbutils=y
+
+# =========================================================
+# 17. USB Mobile / Network
+# =========================================================
+
+# ---------------------------------------------------------
+# USB Mobile / Network
+# ---------------------------------------------------------
+
+# USB Apple 移动设备通信支持。
+CONFIG_PACKAGE_usbmuxd=y
+
+# USB iPhone/iPad 网络接口支持。
+CONFIG_PACKAGE_kmod-usb-net-ipheth=y
+
+# USB RNDIS 网络接口支持。
+CONFIG_PACKAGE_kmod-usb-net-rndis=y
+
+# =========================================================
+# 18. Crypto Kernel Modules
+# =========================================================
+
+#
+# 主动选择需要预装的 Crypto 内核模块。
+#
+# 其它 Crypto 模块由 Kconfig / package dependency
+# 根据当前目标平台及软件包依赖自动带入。
+#
+# 例如：
+#
+#   crypto-hash
+#   crypto-hmac
+#   crypto-manager
+#   crypto-aead
+#   crypto-null
+#   crypto-sha3
+#   crypto-sha512
+#
+# 不在此处重复人工声明。
+#
+# =========================================================
+
+# ARC4 加密算法。
+CONFIG_PACKAGE_kmod-crypto-arc4=y
+
+# CRC32C 校验算法。
+CONFIG_PACKAGE_kmod-crypto-crc32c=y
+
+# ECB 加密模式。
+CONFIG_PACKAGE_kmod-crypto-ecb=y
+
+# 内核随机数生成器相关 Crypto 支持。
+CONFIG_PACKAGE_kmod-crypto-rng=y
+
+# SHA-1 哈希算法。
+CONFIG_PACKAGE_kmod-crypto-sha1=y
+
+# 用户态 Crypto 接口。
+CONFIG_PACKAGE_kmod-crypto-user=y
+
+# =========================================================
+# 19. LuCI Languages / Build Features
+# =========================================================
+
+# LuCI 简体中文语言支持。
+CONFIG_LUCI_LANG_zh_Hans=y
+
+# 不启用 CSS Tidy。
+# CONFIG_LUCI_CSSTIDY is not set
+
+# 不启用 JavaScript 压缩器。
+# CONFIG_LUCI_JSMIN is not set
+
+# =========================================================
+# 20. Attended Sysupgrade
+# =========================================================
+
+#
+# 本固件采用 YAIF 自维护编译与升级流程，
+# 不使用 Attended Sysupgrade（ASU）。
+#
+# =========================================================
+
+# 不安装 Attended Sysupgrade LuCI 应用。
+# CONFIG_PACKAGE_luci-app-attendedsysupgrade is not set
+
+# 不安装 Attended Sysupgrade 简体中文语言包。
+# CONFIG_PACKAGE_luci-i18n-attendedsysupgrade-zh-cn is not set
+
+# =========================================================
