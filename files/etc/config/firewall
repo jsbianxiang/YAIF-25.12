@@ -58,7 +58,7 @@ config defaults
 	option forward 'REJECT'
 
 
-	### 路由/NAT 卸载 ###
+	### 路由/NAT 卸载方式 ###
 
 	# 软件流量分载
 	option flow_offloading '0'
