@@ -1,30 +1,84 @@
 name: Clean Old Workflow Runs
 
+# =========================================================
+# YAIF Workflow 历史运行记录清理
+#
+# 用途：
+#   手动清理 GitHub Actions 旧的 Workflow Run。
+#
+# 注意：
+#   - 仅清理 Workflow Run 历史记录
+#   - 不删除 GitHub Release
+#   - 不删除源码
+#   - 不修改仓库文件
+#
+# =========================================================
+
 on:
   workflow_dispatch:
     inputs:
+      # 清理多少天以前的 Workflow Run。
       days:
         description: "清理多少天之前的历史记录"
         required: true
+        type: string
         default: "3"
+
+      # 每个 Workflow 至少保留多少条运行记录。
       minimum_runs:
         description: "至少保留的运行记录数量"
         required: true
+        type: string
         default: "3"
 
+# 删除 Workflow Run 所需权限。
 permissions:
   actions: write
 
 jobs:
   clean-runs:
-    # 同步切回官方推荐的最稳 22.04 环境
-    runs-on: ubuntu-22.04
+    # 与 YAIF 主构建环境保持一致。
+    runs-on: ubuntu-24.04
 
     steps:
-      - name: "清理旧的 Workflow 运行历史"
+      # =====================================================
+      # 1. 检查输入参数
+      # =====================================================
+
+      - name: 检查清理参数
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DAYS="${{ inputs.days }}"
+          MINIMUM_RUNS="${{ inputs.minimum_runs }}"
+
+          echo "===== 清理参数 ====="
+          echo "清理天数：${DAYS}"
+          echo "最少保留：${MINIMUM_RUNS}"
+
+          # days 必须为非负整数。
+          if ! [[ "$DAYS" =~ ^[0-9]+$ ]]; then
+            echo "ERROR：days 必须为非负整数。"
+            exit 1
+          fi
+
+          # minimum_runs 必须为正整数。
+          if ! [[ "$MINIMUM_RUNS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "ERROR：minimum_runs 必须为正整数。"
+            exit 1
+          fi
+
+          echo "清理参数：正常"
+
+      # =====================================================
+      # 2. 清理旧 Workflow Runs
+      # =====================================================
+
+      - name: 清理旧的 Workflow 运行历史
         uses: Mattraks/delete-workflow-runs@v2
         with:
           token: ${{ github.token }}
           repository: ${{ github.repository }}
-          retain_days: ${{ github.event.inputs.days }}
-          keep_minimum_runs: ${{ github.event.inputs.minimum_runs }}
+          retain_days: ${{ inputs.days }}
+          keep_minimum_runs: ${{ inputs.minimum_runs }}
