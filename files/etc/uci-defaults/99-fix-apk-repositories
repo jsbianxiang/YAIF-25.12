@@ -38,4 +38,27 @@ sed -i \
     -e '/video.*packages\.adb/d' \
     "$REPO"
 
+
+
+
+# =========================================================
+# YAIF R2S 自定义设置
+# =========================================================
+
+# 自定义变量预设
+lan_ip_address="192.168.2.1/24"
+
+# log potential errors
+exec >/tmp/setup.log 2>&1
+
+if [ -n "$root_password" ]; then
+  (echo "$root_password"; sleep 1; echo "$root_password") | passwd > /dev/null
+fi
+
+# Configure LAN
+if [ -n "$lan_ip_address" ]; then
+  uci set network.lan.ipaddr="$lan_ip_address"
+  uci commit network
+fi
+
 exit 0
