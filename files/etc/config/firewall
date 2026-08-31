@@ -35,12 +35,12 @@ config defaults
 	### 常规设置 ###
 	
 	# 启用 SYN Flood 防护
-	option synflood_protect '0'
+	option synflood_protect '1'
 
 	# 丢弃 INVALID 状态连接
 	#
 	# YAIF 安全策略：主动丢弃 conntrack 标记为 INVALID 的数据包。
-	option drop_invalid '0'
+	option drop_invalid '1'
 
 	# 启用 FullCone NAT
 	option fullcone '1'
@@ -61,10 +61,10 @@ config defaults
 	### 路由/NAT 卸载 ###
 
 	# 软件流量分载
-	option flow_offloading '0'
+	option flow_offloading '1'
 
 	# 硬件流量分载
-	option flow_offloading_hw '0'
+	option flow_offloading_hw '1'
 
 
 # =========================================================
