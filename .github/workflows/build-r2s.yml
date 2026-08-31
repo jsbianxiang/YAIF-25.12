@@ -452,11 +452,12 @@ jobs:
       #   不自动覆盖 config.seed。
       #
       # =====================================================
-
       - name: config.seed 逆向审查 SSH
         if: ${{ inputs.ssh == true }}
         timeout-minutes: 60
         uses: mxschmitt/action-tmate@v3.24
+        with:
+          connect-timeout-seconds: 180
 
       # =====================================================
       # 13. SSH 审查结束后的状态快照
