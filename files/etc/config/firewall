@@ -61,10 +61,10 @@ config defaults
 	### 路由/NAT 卸载 ###
 
 	# 软件流量分载
-	option flow_offloading '0'
+	option flow_offloading '1'
 
 	# 硬件流量分载
-	option flow_offloading_hw '0'
+	option flow_offloading_hw '1'
 
 
 # =========================================================
