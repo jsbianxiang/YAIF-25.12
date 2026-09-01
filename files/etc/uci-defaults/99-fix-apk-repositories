@@ -9,41 +9,38 @@
 # 作用：
 #   1. 修正 ImmortalWrt APK 官方软件源
 #   2. 清理当前无实际内容的 video feed
-#   3. DNS 取消 dnsmasq 重定向/过滤项
+#   3. 清理 dnsmasq DNS 重定向 / 过滤项
 #   4. 禁用 Firewall 流量卸载
-#   5. 保留 FullCone NAT
+#   5. 开启 FullCone NAT
 #   6. 开启 SYN Flood Protection
-#   7. 清理 IPv6 ULA
-#   8. 开启 Packet Steering
-#   9. 设置 R2S LAN IPv4 / IPv6 参数
-#  10. 设置家用 IPv6 RA 参数
+#   7. 开启 Invalid Conntrack 丢弃
+#   8. 清理 IPv6 ULA
+#   9. 开启 Packet Steering
+#  10. 设置 R2S LAN IPv4 / IPv6 参数
+#  11. 设置家用 IPv6 RA 参数
+#  12. 固定 WAN DNS，禁止 ISP 下发 DNS
 #
 # 重要：
 #   本脚本不依赖 cfg01xxxx 等匿名 UCI section ID。
+#   不修改 ZeroTier 配置。
+#   不重启 network / firewall，避免首次启动过程中断网络。
 # =========================================================
 
 
 # =========================================================
-# 1. ImmortalWrt APK Repository 修正
+# 1. 修正 ImmortalWrt APK 官方软件源
 # =========================================================
 
 REPO="/etc/apk/repositories.d/distfeeds.list"
 
 if [ -f "$REPO" ]; then
 
-    # -----------------------------------------------------
-    # 官方 APK 镜像切换为 USTC
-    # -----------------------------------------------------
-
     sed -i \
         -e 's#mirrors.vsean.net/immortalwrt#mirrors.ustc.edu.cn/immortalwrt#g' \
         -e 's#mirrors.vsean.net/openwrt#mirrors.ustc.edu.cn/immortalwrt#g' \
         "$REPO"
 
-    # -----------------------------------------------------
-    # 清理当前无实际内容的官方 video feed
-    # -----------------------------------------------------
-
+    # 删除当前无实际内容的 video feed
     sed -i \
         -e '/video.*packages\.adb/d' \
         "$REPO"
@@ -52,18 +49,20 @@ fi
 
 
 # =========================================================
-# 2. DNS 设置
-# /etc/config/dhcp
-#
-# 25.12 当前只有一个 dnsmasq section：
-#
-#   dhcp.@dnsmasq[0]=dnsmasq
-#
-# 使用官方推荐的 @dnsmasq[0] 定位方式，
-# 不使用动态生成的 cfg01xxxx。
+# 2. DNS / dnsmasq
 # =========================================================
-
-# DNS 取消重定向/过滤
+#
+# DNS 由 Mihomo 统一处理。
+# 清理 dnsmasq 中可能干扰 DNS 行为的选项。
+#
+# 不修改：
+#   min_cache_ttl
+#   use_stale_cache
+#   nonegcache
+#   ednspacket_max
+#
+# 这些属于当前 YAIF DNS 策略。
+# =========================================================
 
 uci -q delete dhcp.@dnsmasq[0].dns_redirect
 uci -q delete dhcp.@dnsmasq[0].nonwildcard
@@ -74,63 +73,61 @@ uci -q delete dhcp.@dnsmasq[0].filter_a
 
 
 # =========================================================
-# 3. LAN IPv6 / RA 设置
-# /etc/config/dhcp
+# 3. LAN IPv6 RA / DHCPv6
+# =========================================================
 #
-# 当前实际 section：
+# 家用 IPv6：
+#   RA = Server
+#   SLAAC = 不单独指定
+#   DHCPv6 = 不启用
+#   RA Flags = none
+#   DNS Service = 关闭
 #
-#   dhcp.lan=dhcp
+# IPv6 地址由上游 DHCPv6-PD / RA 提供。
 # =========================================================
 
-# 禁用 SLAAC / DHCPv6 服务项
 uci -q delete dhcp.lan.ra_slaac
 uci -q delete dhcp.lan.dhcpv6
 
-# RA 优先级
 uci set dhcp.lan.ra_preference='medium'
 
-# 不通过 RA flags 强制附加其他行为
 uci -q delete dhcp.lan.ra_flags
 uci add_list dhcp.lan.ra_flags='none'
 
-# 不让 odhcpd 提供 DNS 服务
 uci set dhcp.lan.dns_service='0'
 
 
 # =========================================================
-# 4. Firewall 设置
-# /etc/config/firewall
+# 4. Firewall
+# =========================================================
 #
-# 当前实际 section：
+# R2S 不使用：
+#   Flow Offloading
+#   Hardware Flow Offloading
 #
-#   firewall.@defaults[0]=defaults
+# 保留：
+#   FullCone NAT
+#   SYN Flood Protection
 #
-# 不使用 cfg01xxxx。
+# 增强：
+#   丢弃 Invalid Conntrack 状态的数据包
 # =========================================================
 
-# 清理旧式 / 非目标配置
 uci -q delete firewall.@defaults[0].syn_flood
 uci -q delete firewall.@defaults[0].fullcone6
 uci -q delete firewall.@defaults[0].flow_offloading
 uci -q delete firewall.@defaults[0].flow_offloading_hw
 
-# 开启 SYN Flood Protection
+uci set firewall.@defaults[0].drop_invalid='1'
 uci set firewall.@defaults[0].synflood_protect='1'
-
-# 保持 FullCone NAT
 uci set firewall.@defaults[0].fullcone='1'
 
 
 # =========================================================
-# 5. Network 全局设置
-# /etc/config/network
-#
-# 当前实际 section：
-#
-#   network.globals=globals
+# 5. Network Globals
 # =========================================================
 
-# 清除 IPv6 ULA 前缀，避免 ULA 冲突
+# 删除默认 ULA 前缀
 uci -q delete network.globals.ula_prefix
 
 # 开启 Packet Steering
@@ -138,34 +135,42 @@ uci set network.globals.packet_steering='1'
 
 
 # =========================================================
-# 6. LAN 网络设置
-# /etc/config/network
-#
-# 当前实际 section：
-#
-#   network.lan=interface
+# 6. LAN IPv4 / IPv6
 # =========================================================
 
 lan_ip_address="192.168.2.1/24"
 
-# LAN IPv4
 uci set network.lan.ipaddr="$lan_ip_address"
-
-# 不使用 multipath
 uci set network.lan.multipath='off'
-
-# LAN 不自行进行 IPv6 prefix delegation
 uci set network.lan.delegate='0'
-
-# LAN IPv6 前缀长度
 uci set network.lan.ip6assign='64'
-
-# IPv6 Interface ID
 uci set network.lan.ip6ifaceid='eui64'
 
 
 # =========================================================
-# 7. 提交配置
+# 7. WAN / WAN6 DNS
+# =========================================================
+#
+# WAN：
+#   禁止 ISP 自动下发 DNS
+#   仅使用指定 IPv4 DNS
+#
+# WAN6：
+#   禁止 ISP 通过 DHCPv6 下发 DNS
+#
+# 先删除旧 DNS，再重新添加，避免脚本重复执行
+# 时产生重复 DNS 条目。
+# =========================================================
+
+uci -q delete network.wan.dns
+uci add_list network.wan.dns='119.29.29.29'
+
+uci set network.wan.peerdns='0'
+uci set network.wan6.peerdns='0'
+
+
+# =========================================================
+# 8. 保存配置
 # =========================================================
 
 uci commit dhcp
@@ -174,7 +179,7 @@ uci commit network
 
 
 # =========================================================
-# 8. 完成
+# 完成
 # =========================================================
 
 exit 0
