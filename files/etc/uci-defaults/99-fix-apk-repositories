@@ -1,64 +1,180 @@
 #!/bin/sh
 
 # =========================================================
-# ImmortalWrt APK Repository 修正
+# YAIF R2S 25.12 首次启动修正
+#
+# 适用：
+#   ImmortalWrt 25.12.x
 #
 # 作用：
-#   1. 将 ImmortalWrt 官方 APK 镜像切换为 USTC
-#   2. 清理当前无实际内容的官方 video feed
+#   1. 修正 ImmortalWrt APK 官方软件源
+#   2. 清理当前无实际内容的 video feed
+#   3. DNS 取消 dnsmasq 重定向/过滤项
+#   4. 禁用 Firewall 流量卸载
+#   5. 保留 FullCone NAT
+#   6. 开启 SYN Flood Protection
+#   7. 清理 IPv6 ULA
+#   8. 开启 Packet Steering
+#   9. 设置 R2S LAN IPv4 / IPv6 参数
+#  10. 设置家用 IPv6 RA 参数
 #
-# 说明：
-#   Clashoo 第三方 APK 源单独通过
-#   /etc/apk/repositories.d/customfeeds.list 提供，
-#   不在此处处理。
+# 重要：
+#   本脚本不依赖 cfg01xxxx 等匿名 UCI section ID。
+# =========================================================
+
+
+# =========================================================
+# 1. ImmortalWrt APK Repository 修正
 # =========================================================
 
 REPO="/etc/apk/repositories.d/distfeeds.list"
 
-[ -f "$REPO" ] || exit 0
+if [ -f "$REPO" ]; then
 
-# ---------------------------------------------------------
-# 1. 官方 APK 镜像切换
-# ---------------------------------------------------------
+    # -----------------------------------------------------
+    # 官方 APK 镜像切换为 USTC
+    # -----------------------------------------------------
+
+    sed -i \
+        -e 's#mirrors.vsean.net/immortalwrt#mirrors.ustc.edu.cn/immortalwrt#g' \
+        -e 's#mirrors.vsean.net/openwrt#mirrors.ustc.edu.cn/immortalwrt#g' \
+        "$REPO"
+
+    # -----------------------------------------------------
+    # 清理当前无实际内容的官方 video feed
+    # -----------------------------------------------------
+
+    sed -i \
+        -e '/video.*packages\.adb/d' \
+        "$REPO"
+
+fi
+
+
+# =========================================================
+# 2. DNS 设置
+# /etc/config/dhcp
 #
-# ImmortalWrt 默认大陆镜像稳定性不足，
-# 使用 USTC 作为官方 APK 软件源镜像。
-# ---------------------------------------------------------
+# 25.12 当前只有一个 dnsmasq section：
+#
+#   dhcp.@dnsmasq[0]=dnsmasq
+#
+# 使用官方推荐的 @dnsmasq[0] 定位方式，
+# 不使用动态生成的 cfg01xxxx。
+# =========================================================
 
-sed -i \
-    -e 's#mirrors.vsean.net/immortalwrt#mirrors.ustc.edu.cn/immortalwrt#g' \
-    -e 's#mirrors.vsean.net/openwrt#mirrors.ustc.edu.cn/immortalwrt#g' \
-    "$REPO"
+# DNS 取消重定向/过滤
 
-# ---------------------------------------------------------
-# 2. 清理当前无实际内容的 video feed
-# ---------------------------------------------------------
-
-sed -i \
-    -e '/video.*packages\.adb/d' \
-    "$REPO"
-
-
+uci -q delete dhcp.@dnsmasq[0].dns_redirect
+uci -q delete dhcp.@dnsmasq[0].nonwildcard
+uci -q delete dhcp.@dnsmasq[0].boguspriv
+uci -q delete dhcp.@dnsmasq[0].filterwin2k
+uci -q delete dhcp.@dnsmasq[0].filter_aaaa
+uci -q delete dhcp.@dnsmasq[0].filter_a
 
 
 # =========================================================
-# YAIF R2S 自定义设置
+# 3. LAN IPv6 / RA 设置
+# /etc/config/dhcp
+#
+# 当前实际 section：
+#
+#   dhcp.lan=dhcp
 # =========================================================
 
-# 自定义变量预设
+# 禁用 SLAAC / DHCPv6 服务项
+uci -q delete dhcp.lan.ra_slaac
+uci -q delete dhcp.lan.dhcpv6
+
+# RA 优先级
+uci set dhcp.lan.ra_preference='medium'
+
+# 不通过 RA flags 强制附加其他行为
+uci -q delete dhcp.lan.ra_flags
+uci add_list dhcp.lan.ra_flags='none'
+
+# 不让 odhcpd 提供 DNS 服务
+uci set dhcp.lan.dns_service='0'
+
+
+# =========================================================
+# 4. Firewall 设置
+# /etc/config/firewall
+#
+# 当前实际 section：
+#
+#   firewall.@defaults[0]=defaults
+#
+# 不使用 cfg01xxxx。
+# =========================================================
+
+# 清理旧式 / 非目标配置
+uci -q delete firewall.@defaults[0].syn_flood
+uci -q delete firewall.@defaults[0].fullcone6
+uci -q delete firewall.@defaults[0].flow_offloading
+uci -q delete firewall.@defaults[0].flow_offloading_hw
+
+# 开启 SYN Flood Protection
+uci set firewall.@defaults[0].synflood_protect='1'
+
+# 保持 FullCone NAT
+uci set firewall.@defaults[0].fullcone='1'
+
+
+# =========================================================
+# 5. Network 全局设置
+# /etc/config/network
+#
+# 当前实际 section：
+#
+#   network.globals=globals
+# =========================================================
+
+# 清除 IPv6 ULA 前缀，避免 ULA 冲突
+uci -q delete network.globals.ula_prefix
+
+# 开启 Packet Steering
+uci set network.globals.packet_steering='1'
+
+
+# =========================================================
+# 6. LAN 网络设置
+# /etc/config/network
+#
+# 当前实际 section：
+#
+#   network.lan=interface
+# =========================================================
+
 lan_ip_address="192.168.2.1/24"
 
-# log potential errors
-exec >/tmp/setup.log 2>&1
+# LAN IPv4
+uci set network.lan.ipaddr="$lan_ip_address"
 
-if [ -n "$root_password" ]; then
-  (echo "$root_password"; sleep 1; echo "$root_password") | passwd > /dev/null
-fi
+# 不使用 multipath
+uci set network.lan.multipath='off'
 
-# Configure LAN
-if [ -n "$lan_ip_address" ]; then
-  uci set network.lan.ipaddr="$lan_ip_address"
-  uci commit network
-fi
+# LAN 不自行进行 IPv6 prefix delegation
+uci set network.lan.delegate='0'
+
+# LAN IPv6 前缀长度
+uci set network.lan.ip6assign='64'
+
+# IPv6 Interface ID
+uci set network.lan.ip6ifaceid='eui64'
+
+
+# =========================================================
+# 7. 提交配置
+# =========================================================
+
+uci commit dhcp
+uci commit firewall
+uci commit network
+
+
+# =========================================================
+# 8. 完成
+# =========================================================
 
 exit 0
