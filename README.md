@@ -5,7 +5,8 @@
 面向 **FriendlyARM NanoPi R2S** 的 ImmortalWrt 25.12.1 长期维护型固件基线。
 
 YAIF 的目标不是制作一个堆叠大量软件的“全家桶固件”，而是在尽可能保持 **ImmortalWrt 原生结构** 的基础上，为 NanoPi R2S 提供一套稳定、可重复构建、可审计、便于长期维护的系统基线。
-
+---
+[![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_a65d058ae35861acbf2f)
 ---
 
 ## 项目定位
@@ -700,4 +701,3 @@ Clashoo 的具体安装、内核下载、配置管理和透明代理设置请参
 
 第三方组件遵循各自项目的开源许可证及版权声明。
 ---
-[![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_a65d058ae35861acbf2f)
