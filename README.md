@@ -699,3 +699,5 @@ Clashoo 的具体安装、内核下载、配置管理和透明代理设置请参
 本项目采用 GPL-3.0 License。
 
 第三方组件遵循各自项目的开源许可证及版权声明。
+---
+[![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_a65d058ae35861acbf2f)
