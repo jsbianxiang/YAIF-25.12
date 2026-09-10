@@ -166,10 +166,6 @@ uci -q delete network.wan.dns
 uci add_list network.wan.dns='223.5.5.5'
 uci add_list network.wan.dns='119.29.29.29'
 
-uci -q delete network.wan6.dns
-uci add_list network.wan6.dns='2400:3200::1'
-uci add_list network.wan6.dns='2402:4e00::'
-
 uci set network.wan.peerdns='0'
 uci set network.wan6.peerdns='0'
 
