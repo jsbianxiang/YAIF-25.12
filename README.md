@@ -6,8 +6,7 @@
 
 YAIF 的目标不是制作一个堆叠大量软件的“全家桶固件”，而是在尽可能保持 **ImmortalWrt 原生结构** 的基础上，为 NanoPi R2S 提供一套稳定、可重复构建、可审计、便于长期维护的系统基线。
 ---
-[![Powered by OrcaRouter](https://img.shields.io/badge/Powered_by-OrcaRouter-2563eb)](https://www.orcarouter.ai/ref/ref_a65d058ae35861acbf2f)
----
+
 
 ## 项目定位
 
