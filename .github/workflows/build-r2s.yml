@@ -1,10 +1,10 @@
-name: Build ImmortalWrt 25.12.1 for NanoPi R2S
+name: Build ImmortalWrt 25.12.2 for NanoPi R2S
 
 # =========================================================
 # YAIF-25.12 NanoPi R2S 固件构建工作流
 #
 # 基础系统：
-#   ImmortalWrt 25.12.1
+#   ImmortalWrt 25.12.2
 #
 # 硬件：
 #   FriendlyARM NanoPi R2S
@@ -50,7 +50,7 @@ permissions:
 
 env:
   # 固定 ImmortalWrt 版本，避免上游版本漂移。
-  IMMORTALWRT_VERSION: "25.12.1"
+  IMMORTALWRT_VERSION: "25.12.2"
 
   # ImmortalWrt 官方仓库。
   IMMORTALWRT_REPO: "https://github.com/immortalwrt/immortalwrt"
@@ -170,7 +170,7 @@ jobs:
       # 5. 克隆固定版本的 ImmortalWrt
       # =====================================================
 
-      - name: 克隆 ImmortalWrt 25.12.1
+      - name: 克隆 ImmortalWrt 25.12.2
         run: |
           set -euo pipefail
 
@@ -1036,7 +1036,7 @@ jobs:
       - name: 上传固件
         uses: actions/upload-artifact@v7
         with:
-          name: YAIF-25.12.1-R2S-${{ github.run_number }}
+          name: YAIF-25.12.2-R2S-${{ github.run_number }}
           retention-days: 90
           if-no-files-found: error
           path: |
@@ -1050,18 +1050,18 @@ jobs:
         if: ${{ inputs.release == true }}
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: YAIF-25.12.1-R2S-build-${{ github.run_id }}
-          name: YAIF-25.12.1 NanoPi R2S Build ${{ github.run_number }}
+          tag_name: YAIF-25.12.2-R2S-build-${{ github.run_id }}
+          name: YAIF-25.12.2 NanoPi R2S Build ${{ github.run_number }}
           files: |
             release/*
           body: |
-            ## YAIF-25.12.1 NanoPi R2S
+            ## YAIF-25.12.2 NanoPi R2S
 
             ### 系统
 
             | 项目 | 内容 |
             | --- | --- |
-            | 基础系统 | ImmortalWrt 25.12.1 |
+            | 基础系统 | ImmortalWrt 25.12.2 |
             | Target | rockchip / armv8 |
             | Device | FriendlyARM NanoPi R2S |
             | Kernel | Linux 6.12.x |
@@ -1092,6 +1092,6 @@ jobs:
 
             ### 说明
 
-            YAIF-25.12.1 NanoPi R2S 自维护固件。
+            YAIF-25.12.2 NanoPi R2S 自维护固件。
 
-            基于 ImmortalWrt 25.12.1 构建。
+            基于 ImmortalWrt 25.12.2 构建。
