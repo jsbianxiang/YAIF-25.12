@@ -2,7 +2,7 @@
 # YAIF-25.12 NanoPi R2S Long Term Maintenance Base
 #
 # 基础系统：
-#   ImmortalWrt 25.12.1
+#   ImmortalWrt 25.12.2
 #
 # 上游基线：
 #   OpenWrt 25.12
@@ -27,7 +27,7 @@
 #
 # 配置来源与处理原则
 #
-# 1. ImmortalWrt 25.12.1 官方 Target / Device Profile / Packages
+# 1. ImmortalWrt 25.12.2 官方 Target / Device Profile / Packages
 # 2. Clashoo 软件包
 # 3. 本 seed 的显式功能选择
 #
