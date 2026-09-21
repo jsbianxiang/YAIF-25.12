@@ -1,37 +1,44 @@
 #!/bin/sh
 
 # =========================================================
-# YAIF R2S 25.12 首次启动修正
+# YAIF R2S 25.12 配置修正（适配 Clashoo 仅内核模式）
+#
+# 原始版本：YAIF R2S 25.12 首次启动修正
+# 本版本：2026-09-22 修订，适配「Clashoo core_only='1'」宿主机环境
 #
 # 适用：
-#   ImmortalWrt 25.12.x
+#   ImmortalWrt 25.12.x + Clashoo 仅内核模式
 #
-# 作用：
-#   1. 修正 ImmortalWrt APK 官方软件源
-#   2. 删除当前无实际内容的 video feed
-#   3. 清理 dnsmasq 显式 DNS 干预配置
-#   4. 禁用 Firewall 流量卸载
-#   5. 开启 FullCone NAT
-#   6. 关闭 SYN Flood Protection
-#   7. 保留 Invalid Conntrack 默认处理
-#   8. 清理 IPv6 ULA 默认前缀
-#   9. 开启 Packet Steering
-#  10. 设置 R2S LAN IPv4 / IPv6 参数
-#  11. 设置家庭 IPv6 RA / SLAAC 参数
-#  12. 固定 WAN DNS，禁止 ISP DNS 自动下发
+# 与原始版的差异（共 5 处，均有 ▲ 标记）：
+#   ▲1 FullCone NAT 由启用改为禁用（与 UDP TProxy 冲突）
+#   ▲2 新增清理 dnsmasq 显式上游 server（原脚本遗漏）
+#   ▲3 新增清理 ZeroTier 残留 chain-pre 钩子（原脚本刻意不碰）
+#   ▲4 新增 DNS 劫持相关确认（不做修改，仅提示）
+#   ▲5 WAN/WAN6 DNS 段重写：WAN 改双上游、WAN6 不再设自定义 DNS
 #
-# 设计原则：
+# 设计原则（不变）：
 #   - DNS 由 Mihomo 统一接管
 #   - dnsmasq 仅承担基础 DHCP / RA 服务
 #   - R2S 不启用流量卸载，避免影响代理透明转发
 #   - IPv6 使用运营商提供的 LAN /64 前缀
 #   - LAN 采用 RA + SLAAC，不进行 IPv6 前缀继续委派
 #
-# 重要：
-#   本脚本不依赖 cfg01xxxx 等匿名 UCI section ID。
-#   不修改 ZeroTier 配置。
-#   不重启 network / firewall，避免首次启动过程中断网络。
+# 幂等性：
+#   可重复执行，所有操作均先删后建或使用 -q 静默。
 # =========================================================
+
+
+# =========================================================
+# 0. 前置备份（新增：原脚本无备份）
+# =========================================================
+
+BK="/root/yaif-adapt-backup-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$BK"
+cp -a /etc/config/dhcp      "$BK/dhcp"      2>/dev/null
+cp -a /etc/config/firewall  "$BK/firewall"  2>/dev/null
+cp -a /etc/config/network   "$BK/network"   2>/dev/null
+cp -a /etc/apk/repositories.d/distfeeds.list "$BK/distfeeds.list" 2>/dev/null
+echo "备份已保存到: $BK"
 
 
 # =========================================================
@@ -66,9 +73,7 @@ fi
 #   DNS 过滤
 #   默认缓存限制
 #   系统 resolv.conf 跟随行为
-#
-# 删除后由 dnsmasq 默认逻辑运行。
-# Mihomo 负责最终 DNS 解析策略。
+#   ▲2 显式上游 server（原脚本遗漏，必须清理）
 # =========================================================
 
 uci -q delete dhcp.@dnsmasq[0].dns_redirect
@@ -81,6 +86,13 @@ uci -q delete dhcp.@dnsmasq[0].max_cache_ttl
 uci -q delete dhcp.@dnsmasq[0].min_cache_ttl
 uci -q delete dhcp.@dnsmasq[0].cachesize
 uci -q delete dhcp.@dnsmasq[0].noresolv
+
+# ▲2 新增：清理 dnsmasq 强制上游
+#    理由：DNS 应全部交由 mihomo 处理，dnsmasq 不应指定上游。
+#    注：nft 的 dnat 劫持优先级更高，此项对 LAN 客户端实际不生效，
+#        清理目的是消除配置歧义 + 防止劫持异常时 DNS 回流到国内公共 DNS。
+uci -q delete dhcp.@dnsmasq[0].server
+
 
 # =========================================================
 # 3. LAN IPv6 RA / DHCPv6
@@ -127,8 +139,11 @@ uci set dhcp.lan.dns_service='0'
 #   Flow Offloading
 #   Hardware Flow Offloading
 #
-# 保留：
-#   FullCone NAT
+# ▲1 变更：FullCone NAT 由「启用」改为「禁用」
+#    理由：fullcone 与 mihomo 的 UDP TProxy 混用时，NAT 会话语义冲突，
+#          表现为部分 UDP 应用（游戏 / 语音 / QUIC 回退）连不上或掉线。
+#    若你确实需要全锥 NAT（BT 做种、外部直连进来），
+#    把下面 fullcone 改为 '1' 并自行承担 UDP 稳定性风险。
 #
 # 禁用：
 #   Flow Offloading
@@ -137,10 +152,6 @@ uci set dhcp.lan.dns_service='0'
 #
 # 不启用：
 #   Invalid Conntrack 丢弃
-#
-# 目的：
-#   降低 R2S 防火墙额外处理，
-#   保持 Mihomo 透明代理链路稳定。
 # =========================================================
 
 uci -q delete firewall.@defaults[0].syn_flood
@@ -150,11 +161,31 @@ uci -q delete firewall.@defaults[0].flow_offloading_hw
 
 uci set firewall.@defaults[0].drop_invalid='0'
 uci set firewall.@defaults[0].synflood_protect='0'
-uci set firewall.@defaults[0].fullcone='1'
+uci set firewall.@defaults[0].fullcone='0'          # ▲1 原为 '1'
 
 
 # =========================================================
-# 5. Network Globals
+# 5. 清理 ZeroTier 残留 nftables 钩子（▲3 新增）
+# =========================================================
+#
+# ZeroTier 已关闭（zerotier.global.enabled='0'），
+# 但三条 include 钩子仍残留在 firewall 配置中，位置为 chain-pre，
+# 与 mihomo 内核注入 nft 规则的位置重叠。
+#
+# 当前因目标文件不存在被 fw4 跳过，不会立刻出问题，
+# 但一旦启用 ZeroTier 就会造成规则顺序冲突。
+#
+# 本脚本按你的环境（不使用 ZeroTier）直接清理。
+# 若将来要用 ZeroTier，重新安装时插件会自动重建这些钩子。
+# =========================================================
+
+uci -q delete firewall.zerotier_input
+uci -q delete firewall.zerotier_srcnat
+uci -q delete firewall.zerotier_forward
+
+
+# =========================================================
+# 6. Network Globals
 # =========================================================
 
 # 删除默认 ULA 前缀
@@ -165,7 +196,7 @@ uci set network.globals.packet_steering='1'
 
 
 # =========================================================
-# 6. LAN IPv4 / IPv6
+# 7. LAN IPv4 / IPv6
 # =========================================================
 
 uci -q delete network.lan.ipaddr
@@ -178,29 +209,67 @@ uci set network.lan.ip6ifaceid='eui64'
 
 
 # =========================================================
-# 7. WAN / WAN6 DNS
+# 8. WAN / WAN6 DNS  （▲5 重写）
 # =========================================================
 #
-# WAN：
-#   禁止 ISP 自动下发 DNS
-#   仅使用指定 IPv4 DNS
+# 【为什么重写这一段】
 #
-# WAN6：
-#   禁止 ISP 通过 DHCPv6 下发 DNS
+# 原脚本只写了：
+#     wan.dns = 119.29.29.29  （单点）
+#     wan.peerdns = 0
+#     wan6.peerdns = 0
 #
-# 先删除旧 DNS，再重新添加，避免脚本重复执行
-# 时产生重复 DNS 条目。
+# 两个问题：
+#
+#   (1) wan.dns 单点。119.29.29.29 抽风时 R2S 自身解析直接废掉。
+#       虽然 mihomo 接管了绝大部分解析，但劫持异常时这个上游是兜底，
+#       单点风险不值得留。
+#
+#   (2) wan6.peerdns='0' 在 IPv6 上作用有限。
+#       peerdns 只控制 netifd 是否采纳 DHCPv6 的 DNS 选项(option 23)，
+#       而家用宽带（尤其中国电信）的 IPv6 DNS 多数走 RA 的 RDNSS
+#       (option 25)，peerdns 管不住。
+#       因此「WAN6 自定义 DNS」实际不起决定作用，只会给人
+#       「已经控制住 DNS 了」的错觉。
+#
+# 【本架构下的实际 DNS 链路】
+#
+#   客户端 → dnsmasq(53)
+#               ↓
+#          [nft dnat 劫持到 198.18.0.1]
+#               ↓
+#          mihomo DNS (nameserver-policy 分流)
+#               ↓
+#          国内域名 → 国内 DoH（真实 IP）
+#          境外域名 → 境外 DoH（fake-ip）
+#
+#   结论：WAN 侧的 DNS 配置只服务于
+#         「R2S 本机解析 + 劫持异常兜底」，
+#         不影响客户端分流结果。
+#
+# 【本版的取舍】
+#
+#   WAN  ：保留 peerdns='0'（IPv4 上真生效），DNS 改为双上游避免单点
+#   WAN6 ：不设自定义 DNS，仅保留 peerdns='0'
+#          （设了也不起决定作用，留空更诚实）
+#
+# 先删除旧 DNS 再重新添加，保证脚本可重复执行。
 # =========================================================
 
+# --- WAN（IPv4）：禁止 ISP 下发 + 双 DNS 冗余 ---
 uci -q delete network.wan.dns
 uci add_list network.wan.dns='119.29.29.29'
-
+uci add_list network.wan.dns='223.5.5.5'
 uci set network.wan.peerdns='0'
+
+# --- WAN6（IPv6）：不设自定义 DNS ---
+#     删掉可能存在的旧值，交由 mihomo 全权处理
+uci -q delete network.wan6.dns
 uci set network.wan6.peerdns='0'
 
 
 # =========================================================
-# 8. 保存配置
+# 9. 保存配置
 # =========================================================
 
 uci commit dhcp
@@ -209,7 +278,37 @@ uci commit network
 
 
 # =========================================================
-# 完成
+# 10. 完成前的自检（▲4 新增）
 # =========================================================
+
+echo ""
+echo "===== 自检结果 ====="
+echo "[dnsmasq]"
+printf "  server        : %s\n" "$(uci -q get dhcp.@dnsmasq[0].server || echo '(已清空 ✓)')"
+printf "  dns_redirect  : %s\n" "$(uci -q get dhcp.@dnsmasq[0].dns_redirect || echo '(已清空 ✓)')"
+echo "[firewall]"
+printf "  fullcone      : %s\n" "$(uci -q get firewall.@defaults[0].fullcone)"
+printf "  zerotier 钩子 : %s\n" "$(uci show firewall 2>/dev/null | grep -c zerotier)"
+echo "[network]"
+printf "  lan.ipaddr    : %s\n" "$(uci -q get network.lan.ipaddr)"
+printf "  lan.ip6assign : %s\n" "$(uci -q get network.lan.ip6assign)"
+printf "  packet_steering: %s\n" "$(uci -q get network.globals.packet_steering)"
+echo "[WAN DNS]"
+printf "  wan.dns       : %s\n" "$(uci -q get network.wan.dns || echo '(未设置)')"
+printf "  wan.peerdns   : %s\n" "$(uci -q get network.wan.peerdns)"
+printf "  wan6.dns      : %s\n" "$(uci -q get network.wan6.dns || echo '(未设置 ✓ 预期如此)')"
+printf "  wan6.peerdns  : %s\n" "$(uci -q get network.wan6.peerdns)"
+echo "[转发开关]"
+printf "  ipv4 forward  : %s\n" "$(sysctl -n net.ipv4.ip_forward)"
+printf "  ipv6 forward  : %s\n" "$(sysctl -n net.ipv6.conf.all.forwarding)"
+
+echo ""
+echo "注意：本脚本不自动重启服务，避免中断网络。"
+echo "如需生效，手动执行："
+echo "  /etc/init.d/dnsmasq restart"
+echo "  /etc/init.d/firewall restart"
+echo "  /etc/init.d/clashoo restart"
+echo ""
+echo "备份目录: $BK"
 
 exit 0

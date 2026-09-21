@@ -78,10 +78,30 @@ CONFIG_TARGET_IMAGES_GZIP=y
 # 使用 APK 作为软件包管理器
 CONFIG_USE_APK=y
 
-# 保留完整的 Kernel Module 构建选项
+# 不编译全部 Kernel Module
 #
-# 便于后续从匹配的官方 R2S 软件源按需安装 Kernel Module
-CONFIG_ALL_KMODS=y
+# 【为什么关闭 ALL_KMODS】
+#
+# 早期设计为「保留完整 Kernel Module 构建选项」，便于后续
+# 从官方 R2S 软件源按需安装 kmod。
+#
+# 但在 GitHub Actions 环境下这不可行：
+#
+#   1. ALL_KMODS 会触发 3000+ 个 kmod 全量编译；
+#   2. 叠加 CONFIG_KERNEL_DEBUG_INFO（Daed eBPF 必需）
+#      后每个 kmod 都带 debuginfo，体积与耗时进一步放大；
+#   3. ubuntu-24.04 runner 单 job 上限 6 小时，
+#      且默认磁盘仅约 14GB（全量编译通常需 25–40GB）。
+#
+# 实际需要的 kmod 已在本 seed 第 10 节「Transparent Proxy /
+# TUN / TProxy」与「BPF / BTF / eBPF」中逐项显式列出，
+# 覆盖 Clashoo（TUN + TProxy + nft）与 Daed（eBPF/CO-RE）
+# 的全部运行需求，功能无损失。
+#
+# 若将来确有全量 kmod 需求，应改为到官方 R2S 软件源
+# 按需 apk add，而不是把全部 kmod 编译进固件。
+#
+# CONFIG_ALL_KMODS is not set
 
 # 启用开发配置选项
 CONFIG_DEVEL=y
@@ -319,6 +339,60 @@ CONFIG_PACKAGE_kmod-netlink-diag=y
 CONFIG_PACKAGE_kmod-nft-nat=y
 
 # ---------------------------------------------------------
+# Clashoo 运行时依赖（显式预装）
+# ---------------------------------------------------------
+#
+# 来源：openwrt-clashoo/clashoo/Makefile 的 DEPENDS 字段
+#
+#   DEPENDS := $(GO_ARCH_DEPENDS) +ca-bundle +yq +firewall4 +ip-full \
+#              +coreutils-nohup +coreutils-timeout \
+#              +kmod-inet-diag +kmod-nft-socket +kmod-nft-tproxy \
+#              +kmod-tun +kmod-dummy +unzip
+#
+# 为什么必须在 seed 中显式声明：
+#
+#   DEPENDS 仅保证「构建时一同编译」，产物落在 bin/packages/，
+#   并不会自动预装进固件。设备首次启动时若依赖缺失，
+#   需要从 APK 源补装 —— 而 Clashoo 依赖的是第三方 feed
+#   （down.dllkids.xyz），首次启动时网络 / 签名 / 时间任一
+#   未就绪，依赖就装不上，Clashoo 直接不可用。
+#
+#   预装进固件是唯一可靠做法。
+#
+# 另有两项 Clashoo init 脚本实际调用、但未写入 Makefile
+# DEPENDS 的隐式依赖，同样需要显式预装：
+#
+#   jsonfilter —— ucode 读取 JSON 配置
+#   ucode      —— init 脚本大量 ucode 逻辑
+#
+# 其余 DEPENDS 项已在其他章节声明，此处不重复：
+#   ca-bundle            → 第 7 节 Official Base System
+#   yq                   → HTTPS / TLS / Configuration Tools
+#   firewall4            → 第 10 节 Firewall4 Core
+#   ip-full              → DNS 查询 / 解析诊断工具
+#   kmod-tun             → 第 10 节 Transparent Proxy
+#   kmod-dummy           → 第 10 节 Transparent Proxy
+#   kmod-inet-diag       → 第 10 节 Transparent Proxy
+#   kmod-nft-socket      → 第 10 节 Transparent Proxy
+#   kmod-nft-tproxy      → 第 10 节 Transparent Proxy
+#
+
+# init 脚本后台启动 / 超时控制
+CONFIG_PACKAGE_coreutils-nohup=y
+CONFIG_PACKAGE_coreutils-timeout=y
+
+# 内核升级包 / 规则集 zip 解压
+CONFIG_PACKAGE_unzip=y
+
+# ucode JSON 解析
+CONFIG_PACKAGE_jsonfilter=y
+
+# Clashoo init 脚本运行时
+CONFIG_PACKAGE_ucode=y
+CONFIG_PACKAGE_ucode-mod-fs=y
+CONFIG_PACKAGE_ucode-mod-uci=y
+
+# ---------------------------------------------------------
 # Backup Proxy
 # ---------------------------------------------------------
 #
@@ -363,10 +437,14 @@ CONFIG_PACKAGE_ddns-scripts-aliyun=y
 # CONFIG_PACKAGE_luci-app-frpc=y
 # CONFIG_PACKAGE_luci-i18n-frpc-zh-cn=y
 
-# ZeroTier
-CONFIG_PACKAGE_zerotier=y
-CONFIG_PACKAGE_luci-app-zerotier=y
-CONFIG_PACKAGE_luci-i18n-zerotier-zh-cn=y
+# ZeroTier：不启用
+#
+# 使用规范的 is not set 形式，便于 workflow 的
+# 「明确禁用配置」检查直接识别并断言其未被启用。
+# （注释掉的 CONFIG_xxx=y 不会被该检查捕获）
+# CONFIG_PACKAGE_zerotier is not set
+# CONFIG_PACKAGE_luci-app-zerotier is not set
+# CONFIG_PACKAGE_luci-i18n-zerotier-zh-cn is not set
 
 # Watchcat
 CONFIG_PACKAGE_luci-app-watchcat=y

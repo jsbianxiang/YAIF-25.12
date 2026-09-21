@@ -580,7 +580,13 @@ jobs:
           echo "=========================================="
 
           check_config CONFIG_USE_APK y
-          check_config CONFIG_ALL_KMODS y
+
+          # ALL_KMODS 已关闭：
+          #   GitHub Actions 单 job 6 小时上限 + runner 磁盘限制下，
+          #   3000+ kmod 全量编译（且带 KERNEL_DEBUG_INFO）不可行。
+          #   实际所需 kmod 已在 seed 中逐项显式声明。
+          check_disabled CONFIG_ALL_KMODS
+
           check_config CONFIG_DEVEL y
           check_config CONFIG_TOOLCHAINOPTS y
 
@@ -633,6 +639,18 @@ jobs:
 
           check_config CONFIG_PACKAGE_clashoo y
           check_config CONFIG_PACKAGE_luci-app-clashoo y
+
+          echo "=========================================="
+          echo "Clashoo 运行时依赖"
+          echo "=========================================="
+
+          # Clashoo Makefile DEPENDS 中需要显式预装的部分。
+          # DEPENDS 只保证构建时一同编译，不会自动装进固件。
+          check_config CONFIG_PACKAGE_coreutils-nohup y
+          check_config CONFIG_PACKAGE_coreutils-timeout y
+          check_config CONFIG_PACKAGE_unzip y
+          check_config CONFIG_PACKAGE_jsonfilter y
+          check_config CONFIG_PACKAGE_ucode y
 
           echo "=========================================="
           echo "Daed"
