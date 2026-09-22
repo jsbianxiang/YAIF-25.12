@@ -82,16 +82,16 @@ uci -q delete dhcp.@dnsmasq[0].boguspriv
 uci -q delete dhcp.@dnsmasq[0].filterwin2k
 uci -q delete dhcp.@dnsmasq[0].filter_aaaa
 uci -q delete dhcp.@dnsmasq[0].filter_a
-uci -q delete dhcp.@dnsmasq[0].max_cache_ttl
-uci -q delete dhcp.@dnsmasq[0].min_cache_ttl
-uci -q delete dhcp.@dnsmasq[0].cachesize
-uci -q delete dhcp.@dnsmasq[0].noresolv
+# uci -q delete dhcp.@dnsmasq[0].max_cache_ttl
+# uci -q delete dhcp.@dnsmasq[0].min_cache_ttl
+# uci -q delete dhcp.@dnsmasq[0].cachesize
+# uci -q delete dhcp.@dnsmasq[0].noresolv
 
 # ▲2 新增：清理 dnsmasq 强制上游
 #    理由：DNS 应全部交由 mihomo 处理，dnsmasq 不应指定上游。
 #    注：nft 的 dnat 劫持优先级更高，此项对 LAN 客户端实际不生效，
 #        清理目的是消除配置歧义 + 防止劫持异常时 DNS 回流到国内公共 DNS。
-uci -q delete dhcp.@dnsmasq[0].server
+# uci -q delete dhcp.@dnsmasq[0].server
 
 
 # =========================================================
