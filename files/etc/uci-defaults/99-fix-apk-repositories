@@ -202,7 +202,7 @@ uci set dhcp.lan.ra_slaac='1'
 #           与「DHCPv6 = 不启用」的意图不一致
 uci set dhcp.lan.dhcpv6='disabled'
 
-uci set dhcp.lan.ra_preference='high'
+uci set dhcp.lan.ra_preference='medium'
 
 uci -q delete dhcp.lan.ra_flags
 uci add_list dhcp.lan.ra_flags='none'
