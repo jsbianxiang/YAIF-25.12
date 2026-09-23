@@ -4,10 +4,43 @@
 # YAIF R2S 25.12 配置修正（适配 Clashoo 仅内核模式）
 #
 # 原始版本：YAIF R2S 25.12 首次启动修正
-# 本版本：2026-09-23 修订 v8 —— 无效字段清理 + 设备实测校准
+# 本版本：2026-09-23 修订 v9 —— 适配新刷机后的 network 配置
 #
 # 适用：
 #   ImmortalWrt 25.12.x + Clashoo 仅内核模式
+#
+# ---------------------------------------------------------
+# v9：按新刷机后的实际 /etc/config/network 适配
+# ---------------------------------------------------------
+#   N0 【致命】行尾由 CRLF 改为 LF
+#       本文件此前工作区副本是 CRLF。作为 uci-defaults 脚本，
+#       shebang 后的 \r 会让内核去找 "/bin/sh\r" 解释器 ->
+#       首次启动时脚本根本不会被执行（且错误静默）。
+#       注：仓库 .gitattributes 已声明 files/** text eol=lf，
+#       但它不会回改已存在的工作区文件，必须手动转换 +
+#       `git add --renormalize .` 让索引也规范化。
+#
+#   N1 新增 set_dev_mtu 'dummy0' 1492
+#       新配置多出一个 `config device` 段 dummy0（已手动设 mtu/mtu6
+#       1492）。纳入脚本，使 MTU 策略覆盖全部 device 段。
+#
+#   N2 wan6 显式补 reqaddress / reqprefix / norelease
+#       新刷机后的 wan6 段只剩 device / proto / peerdns，没有
+#       reqaddress 与 reqprefix。
+#       【实测修正】不写也能正常工作：lan 照样拿到了 PD 前缀
+#       （240e:3a3:942b:3d12::/64），说明 dhcpv6.sh 的默认行为就会
+#       请求 IA_PD。原先判断的「不写就断」是过度担心。
+#       保留这三行的定位是**显式化 + 防固件变更**，不是必需项。
+#       norelease='1' 另有实际价值：本机 PD 前缀会漂移
+#       （7ef0/7ef1 -> 3d10/3d12），重启时不发 RELEASE 可减缓。
+#
+#   N3 修正 MSS 期望值：'set 1452' -> 'set rt mtu'
+#       fw4 生成的是 --clamp-mss-to-pmtu，按出接口实际 MTU 动态计算，
+#       不是写死 1452。v8 结尾提示写错了，会误导验收。
+#
+#   N4 udhcpc 结案
+#       ps w 无常驻进程 + 配置里无 proto='dhcp' 接口 ->
+#       一次性探测后自行退出，无害。从「仍需确认」移入已结案。
 #
 # ---------------------------------------------------------
 # v8：移除无效 UCI 字段（v7 基础上，按 R2S 实测输出校准）
@@ -98,6 +131,17 @@
 # 幂等性
 # ---------------------------------------------------------
 #   可重复执行。所有 list 型选项一律「先 delete 再 add_list」。
+#
+# 作为 uci-defaults 的运行说明（路径 files/etc/uci-defaults/）：
+#   - 仅在首次启动（含恢复出厂后的首次）执行一次；以 exit 0 结束后
+#     由系统自动删除，之后不再运行
+#   - 故「可重复执行」指手工 sh 执行时安全，不代表每次开机都跑
+#   - 首次启动时网络尚未就绪，脚本只做 uci 写入与 commit，
+#     不自动重启任何服务（符合 uci-defaults 规范）
+#   - 生效需重启，或手动按结尾提示的顺序 restart 各服务
+#
+# ⚠️ 行尾必须是 LF。CRLF 会让 shebang 变成 "/bin/sh\r"，
+#    脚本在路由器上静默不执行（见 N0）。
 # =========================================================
 
 
@@ -266,6 +310,11 @@ uci set firewall.@defaults[0].synflood_protect='0'
 
 # F1 修正：原为 '1'（启用），与上方注释意图相反
 uci set firewall.@defaults[0].fullcone='0'
+
+# ⚠️ 自相矛盾，保留但需实测：本段上方已 delete 过 fullcone6，这里又 set。
+#    若固件不支持该字段，重启会新增一条 unknown option 警告。
+#    验证：/etc/init.d/firewall restart 2>&1 | grep 'unknown option'
+#    -> 若报 fullcone6，删掉下面这一行（只保留上面的 delete）。
 uci set firewall.@defaults[0].fullcone6='0'
 
 # MSS 钳制由 zone 侧保证（defaults 段不写 mtu_fix，见 X2）
@@ -333,7 +382,18 @@ uci set network.lan.ip6ifaceid='eui64'
 # 【为什么 eth0 一次就够】
 #   wan 与 wan6 的 device 都是 eth0（wan6 用 option device 'eth0'，
 #   不是 @wan 别名），所以改 wan 为 static 不会影响 wan6。
+#
+# 【MTU 取值的唯一依据：光猫的真实 PMTU】
+#   1492 是按「以太网 1500 - PPPoE 8 字节」推算的，不是实测值。
+#   若运营商侧还叠了 VLAN tag，真实 PMTU 可能是 1480（1500-8-4-8）。
+#   必须用 DF 位探测确认（命令见脚本结尾「验证要点 7」）：
+#     -s 1464 通、-s 1465 不通  -> PMTU 1492，保持现状
+#     -s 1452 通、-s 1453 不通  -> PMTU 1480，把下面的常量改成 1480
+#   只需改这一处常量，所有 device 段与 MSS 钳制会自动跟随。
 # =========================================================
+
+# ── MTU 常量（端到端路径的瓶颈值）─────────────
+MTU_PATH="${MTU_PATH:-1492}"
 
 # ── device 层 MTU 设置函数 ─────────────────
 # 用法: set_dev_mtu <设备名> <MTU>
@@ -361,10 +421,13 @@ set_dev_mtu() {
     echo "  device[$i] name=$tgt 新建 -> mtu/mtu6 $mtuv"
 }
 
-echo "设置 device 层 MTU："
-set_dev_mtu 'eth0'   1492    # wan + wan6 共用（一次覆盖两个接口）
-set_dev_mtu 'br-lan' 1492    # LAN 桥，决定 RA 里通告的 MTU
-set_dev_mtu 'eth1'   1492    # br-lan 成员口，须 >= master
+echo "设置 device 层 MTU（MTU_PATH=$MTU_PATH）："
+set_dev_mtu 'eth0'   "$MTU_PATH"   # wan + wan6 共用（一次覆盖两个接口）
+set_dev_mtu 'br-lan' "$MTU_PATH"   # LAN 桥，决定 RA 里通告的 MTU
+set_dev_mtu 'eth1'   "$MTU_PATH"   # br-lan 成员口，须 >= master
+                                   # 注：此段在新配置里另有 option ipv6 '1'，
+                                   #     是有效 device 项，脚本不碰
+set_dev_mtu 'dummy0' "$MTU_PATH"   # N1：新配置新增的 device 段
 
 # ── WAN 静态 IPv4 ──────────────────────────
 uci set network.wan.proto='static'
@@ -392,10 +455,20 @@ uci -q delete network.lan.mtu
 uci -q delete network.wan6.dns
 uci set network.wan6.peerdns='0'
 
-# F27：wan6 的其余 dhcpv6 选项（reqaddress / reqprefix / norelease /
-#      sendclientid）一律不碰，保留固件生成的默认值。
-#      reqprefix='auto' 是 LAN 能拿到公网 /64 的前提；
-#      norelease='1' 让重启时不释放旧前缀，避免前缀漂移。
+# N2：新刷机后 wan6 段不再自带 reqaddress / reqprefix，此处显式化。
+#   【实测】不写也能拿到 PD 前缀（dhcpv6.sh 默认就会请求 IA_PD），
+#   所以这三行属于「显式化 + 防固件变更」，不是必需项。
+#   若将来确认固件默认稳定，删掉这三行不影响 IPv6 功能。
+#
+#     reqaddress='try'  : 尝试获取 wan 侧 IPv6 地址
+#     reqprefix='auto'  : 请求 PD 前缀（LAN 公网 /64 的来源）
+#     norelease='1'     : 重启时不发 RELEASE，减缓前缀漂移
+#                         （本机实测前缀会从 7ef0/7ef1 漂到 3d10/3d12）
+uci set network.wan6.reqaddress='try'
+uci set network.wan6.reqprefix='auto'
+uci set network.wan6.norelease='1'
+
+# sendclientid 不写：odhcp6c 默认即 auto，无需显式化。
 
 
 # =========================================================
@@ -445,6 +518,8 @@ echo "[WAN DNS]"
 printf "  wan.dns       : %s\n" "$(uci -q get network.wan.dns || echo '(未设置)')"
 printf "  wan6.dns      : %s\n" "$(uci -q get network.wan6.dns || echo '(未设置 OK，预期如此)')"
 printf "  wan6.peerdns  : %s  (预期 0，dhcpv6 下有效)\n" "$(uci -q get network.wan6.peerdns)"
+printf "  wan6.reqprefix: %s  (预期 auto —— LAN 公网 /64 的来源)\n" "$(uci -q get network.wan6.reqprefix)"
+printf "  wan6.reqaddress: %s  (预期 try)\n" "$(uci -q get network.wan6.reqaddress)"
 echo "[转发开关]"
 printf "  ipv4 forward  : %s\n" "$(sysctl -n net.ipv4.ip_forward)"
 printf "  ipv6 forward  : %s\n" "$(sysctl -n net.ipv6.conf.all.forwarding)"
@@ -476,22 +551,54 @@ echo ""
 echo "  # 3) netifd 是否识别 multipath（用户已确认 25.12 存在）"
 echo "  grep -rn 'multipath' /lib/netifd/ 2>/dev/null | head"
 echo ""
-echo "  # 4) 排查 udhcpc 来源（重启时出现了 udhcpc discover 但无 lease）"
-echo "  uci show network | grep proto"
-echo "  ps w | grep -E 'udhcpc|odhcp6c' | grep -v grep"
-echo "  logread | grep -iE 'udhcpc|netifd' | tail -30"
+echo "【N4 已结案】udhcpc discover / no lease"
+echo "  实测：ps w | grep '[u]dhcpc' 无输出（无常驻进程），且配置中"
+echo "        无 proto='dhcp' 接口 -> 一次性探测后自行退出，无害。"
 echo ""
 echo "===== 验证要点 ====="
-echo "  1) MTU 是否真落到设备（最关键）："
-echo "       ip link show eth0    | head -1     # 期望 mtu 1492"
-echo "       ip link show br-lan  | head -1     # 期望 mtu 1492"
-echo "       ip link show eth1    | head -1     # 期望 mtu 1492"
-echo "  2) IPv6 MTU："
-echo "       cat /proc/sys/net/ipv6/conf/br-lan/mtu    # 期望 1492"
-echo "  3) MSS 钳制是否真的生成（依赖 zone 的 mtu_fix + device MTU）："
+echo "  ★ 本脚本的主线目标：设备 MTU 与光猫 PPPoE 的 PMTU 对齐 ★"
+echo ""
+echo "  1) MTU 是否真落到设备（配置层 -> 内核）："
+echo "       ip link show eth0 | head -1 ; ip link show br-lan | head -1"
+echo "       ip link show eth1 | head -1 ; ip link show dummy0 | head -1"
+echo "       -> 四条都应为 mtu $MTU_PATH"
+echo "  2) IPv6 MTU（RA 通告给 LAN 客户端的值）："
+echo "       cat /proc/sys/net/ipv6/conf/br-lan/mtu    # 期望 $MTU_PATH"
+echo "  3) MSS 钳制是否生成（依赖 zone 的 mtu_fix + device MTU）："
 echo "       nft list ruleset | grep -i 'maxseg size'"
-echo "       -> 期望看到 'tcp option maxseg size set 1452'"
-echo "       -> 若显示 1460，说明 device MTU 没生效，回到第 1) 条"
+echo "       -> 期望 'tcp option maxseg size set rt mtu'"
+echo "          （= --clamp-mss-to-pmtu，按出接口实际 MTU 动态计算，"
+echo "             非字面量数值；无输出说明 zone 的 mtu_fix 未生效）"
+echo ""
+echo "  7) 【最关键】光猫的真实 PMTU —— 决定 MTU_PATH 该填多少"
+echo "     ⚠️ 25.12 默认的 ping 是 busybox，**不支持 -M do**"
+echo "        （-M 是 iputils-ping 专属参数）。以下三种测法任选。"
+echo ""
+echo "     方案 A（推荐，零依赖）：用 IPv6 探测"
+echo "       IPv6 不允许中间分片，超 PMTU 必回 Packet Too Big，"
+echo "       天然等价于 DF 探测，busybox 也能用。"
+echo "       for s in 1452 1444 1432; do \\"
+echo "         printf 'IPv6 payload %s: ' \$s; \\"
+echo "         ping -6 -c1 -W2 -s \$s 2400:3200::1 >/dev/null 2>&1 \\"
+echo "           && echo OK || echo FAIL; \\"
+echo "       done"
+echo "     # 载荷 + 8(ICMPv6) + 40(IPv6 头) = IPv6 包长"
+echo "     #   -s 1452 -> 1500   期望 FAIL（超过 PPPoE）"
+echo "     #   -s 1444 -> 1492   期望 OK"
+echo "     #   -s 1432 -> 1480   期望 OK"
+echo "     -> 1444 OK 且 1452 FAIL => PMTU=1492，MTU_PATH 保持不动"
+echo "     -> 1444 FAIL 但 1432 OK => PMTU=1480（叠了 VLAN tag），"
+echo "        把段 7 的 MTU_PATH 改成 1480 后重跑"
+echo ""
+echo "     方案 B：装 iputils 后走 IPv4 的 -M do"
+echo "       apk add iputils-ping"
+echo "       ping -c1 -W2 -M do -s 1464 223.5.5.5   # 1492 包，期望通"
+echo "       ping -c1 -W2 -M do -s 1472 223.5.5.5   # 1500 包，期望不通"
+echo ""
+echo "     方案 C（最权威，零猜测）：进光猫管理界面直接读"
+echo "        WAN / PPPoE 口的 MTU 值。电脑临时设 192.168.1.3/24，"
+echo "        网关 192.168.1.1，浏览器进 192.168.1.1 查看。"
+echo ""
 echo "  4) wan.dns 必须写成 list："
 echo "       uci show network.wan.dns"
 echo "       -> 应为  '223.5.5.5' '119.29.29.29'   两个独立引号"
