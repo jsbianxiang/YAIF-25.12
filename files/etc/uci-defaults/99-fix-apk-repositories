@@ -265,8 +265,8 @@ uci set firewall.@defaults[0].drop_invalid='0'
 uci set firewall.@defaults[0].synflood_protect='0'
 
 # F1 修正：原为 '1'（启用），与上方注释意图相反
-uci set firewall.@defaults[0].fullcone='1'
-uci set firewall.@defaults[0].fullcone6='1'
+uci set firewall.@defaults[0].fullcone='0'
+uci set firewall.@defaults[0].fullcone6='0'
 
 # MSS 钳制由 zone 侧保证（defaults 段不写 mtu_fix，见 X2）
 uci set firewall.wan.mtu_fix='1'
