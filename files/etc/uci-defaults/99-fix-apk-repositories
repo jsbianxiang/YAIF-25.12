@@ -1,613 +1,281 @@
 #!/bin/sh
 
 # =========================================================
-# YAIF R2S 25.12 配置修正（适配 Clashoo 仅内核模式）
+# YAIF R2S ImmortalWrt 25.12
+# Nikki / Clashoo Mihomo 内核模式适配
 #
-# 原始版本：YAIF R2S 25.12 首次启动修正
-# 本版本：2026-09-23 修订 v9 —— 适配新刷机后的 network 配置
+# 适用于：
+# R2S + ImmortalWrt 25.12
+# Mihomo TUN 透明代理
 #
-# 适用：
-#   ImmortalWrt 25.12.x + Clashoo 仅内核模式
-#
-# ---------------------------------------------------------
-# v9：按新刷机后的实际 /etc/config/network 适配
-# ---------------------------------------------------------
-#   N0 【致命】行尾由 CRLF 改为 LF
-#       本文件此前工作区副本是 CRLF。作为 uci-defaults 脚本，
-#       shebang 后的 \r 会让内核去找 "/bin/sh\r" 解释器 ->
-#       首次启动时脚本根本不会被执行（且错误静默）。
-#       注：仓库 .gitattributes 已声明 files/** text eol=lf，
-#       但它不会回改已存在的工作区文件，必须手动转换 +
-#       `git add --renormalize .` 让索引也规范化。
-#
-#   N1 新增 set_dev_mtu 'dummy0' 1492
-#       新配置多出一个 `config device` 段 dummy0（已手动设 mtu/mtu6
-#       1492）。纳入脚本，使 MTU 策略覆盖全部 device 段。
-#
-#   N2 wan6 显式补 reqaddress / reqprefix / norelease
-#       新刷机后的 wan6 段只剩 device / proto / peerdns，没有
-#       reqaddress 与 reqprefix。
-#       【实测修正】不写也能正常工作：lan 照样拿到了 PD 前缀
-#       （240e:3a3:942b:3d12::/64），说明 dhcpv6.sh 的默认行为就会
-#       请求 IA_PD。原先判断的「不写就断」是过度担心。
-#       保留这三行的定位是**显式化 + 防固件变更**，不是必需项。
-#       norelease='1' 另有实际价值：本机 PD 前缀会漂移
-#       （7ef0/7ef1 -> 3d10/3d12），重启时不发 RELEASE 可减缓。
-#
-#   N3 修正 MSS 期望值：'set 1452' -> 'set rt mtu'
-#       fw4 生成的是 --clamp-mss-to-pmtu，按出接口实际 MTU 动态计算，
-#       不是写死 1452。v8 结尾提示写错了，会误导验收。
-#
-#   N4 udhcpc 结案
-#       ps w 无常驻进程 + 配置里无 proto='dhcp' 接口 ->
-#       一次性探测后自行退出，无害。从「仍需确认」移入已结案。
-#
-# ---------------------------------------------------------
-# v8：移除无效 UCI 字段（v7 基础上，按 R2S 实测输出校准）
-# ---------------------------------------------------------
-# 判定标准（满足任一即移除）：
-#   A. 上游数据模型中不存在（写入后被静默忽略）
-#   B. 字段存在但当前协议下无任何代码路径读取它
-#   C. 已被上游重命名 / 废弃
-#
-# 【已移除】
-#
-#   X1  network.wan.peerdns            —— 判定 B
-#       peerdns 的语义是「是否采纳对端下发的 DNS」，只有 dhcp /
-#       dhcpv6 / pppoe 三种协议的 handler 会读取它。wan 的 proto
-#       已设为 static，static handler 不读此项 -> 无任何代码路径引用。
-#       （wan6 的 proto 是 dhcpv6，其 peerdns='0' 仍然有效，保留。）
-#
-#   X2  firewall.@defaults[0].mtu_fix  —— 判定 A（已由设备实测确认）
-#       OpenWrt 官方 firewall 文档中，mtu_fix 是 **zone 段** 的选项
-#       （"Enable MSS clamping for outgoing zone traffic"），
-#       **不在 defaults 段的选项表内**。fw4 只从 zone 读取。
-#
-#       【R2S 实测证据】/etc/init.d/firewall restart 输出：
-#           Section @defaults[0] specifies unknown option 'mtu_fix'
-#       fw4 显式拒绝了该字段，判定成立。
-#
-#       本环境的 `config zone 'wan'` 已有 `option mtu_fix '1'`，
-#       MSS 钳制由 zone 侧保证。v8 除「不写入」外，
-#       另加一步 delete 清理已存在的残留，消除这条警告。
-#
-# 【设备实测校准】firewall restart 时 fw4 只报了 mtu_fix 一个 unknown option，
-#   对 fullcone / synflood_protect / drop_invalid 均未报错 ——
-#   说明 ImmortalWrt 25.12 的 fw4 接受后三者。据此：
-#     fullcone      -> 确认为有效字段，保留写入
-#     mtu_fix       -> 确认无效，改为 delete + 由 zone 承担
-#
-# 【保留但需人工确认】（见脚本结尾「可疑引用」段）
-#   - firewall.@defaults[0].fullcone6     （删除类，字段可能不存在）
-#   - firewall.@defaults[0].syn_flood     （删除类，已被 synflood_protect 取代）
-#   - dhcp.@dnsmasq[0].filterwin2k        （删除类，新版 dnsmasq 可能已移除）
-#
-# ---------------------------------------------------------
-# v6 修正（针对用户手动配置的回归）
-# ---------------------------------------------------------
-#   F24 不再回写 interface 段的 mtu
-#       v5 保留了 `uci set network.wan.mtu='1492'` 等无效写入，
-#       注释写「无效即无害、保留不动」——但用户手动配置已清掉，
-#       再跑 v5 会把它们写回去，属于脚本反向污染手动配置。
-#       v6 改为显式 delete。（v7 保留此 delete，属防御性清理）
-#   F25 device 段补 mtu6（netifd 的 IPv6 MTU 属性，影响 RA 通告）
-#   F26 补 eth1（br-lan 成员口，MTU 须 >= master）
-#   F27 不动 wan6 的 dhcpv6 默认选项
-#
-# ---------------------------------------------------------
-# v5 修正（基于真实配置的文件级证据）
-# ---------------------------------------------------------
-#   F22 撤销 F5：lan.ipaddr 改回 add_list
-#       真实配置中 loopback 段出厂即 `list ipaddr '127.0.0.1/8'`，
-#       lan 段也是 `list ipaddr '192.168.2.1/24'` —— 证明本环境
-#       ipaddr 是 ARRAY 类型，add_list 才是规范写法。
-#   F18 MTU 改写到 config device 段（MTU 是 device 层属性，
-#       不在 netifd iface_attrs[] 内）
-#   F23 dhcp.lan.ra_slaac 显式 '1'
-#   F19 撤销：network.lan.multipath 保留（25.12 实测存在）
-#
-# ---------------------------------------------------------
-# v2 / v3 / v4 修正（保留）
-# ---------------------------------------------------------
-#   F1  fullcone 由 '1' 改 '0'
-#   F2  补 uci -q delete network.wan.dns（保证 add_list 幂等）
-#   F4  补 uci set dhcp.lan.ra='server'
-#   F6  结尾补 /etc/init.d/network restart
-#   F8  删除 ZeroTier 清理段（新固件不内置）
-#   F11 dhcp.lan.dhcpv6 显式 'disabled'（删除 ≠ 禁用）
-#   F13 fullcone 理由重写（本配置无 UDP TProxy，原理由不成立）
-#   F15 APK 源替换加结果校验
-#
-# ---------------------------------------------------------
-# 设计原则（不变）
-# ---------------------------------------------------------
-#   - DNS 由 Mihomo 统一接管
-#   - dnsmasq 仅承担基础 DHCP / RA 服务
-#   - R2S 不启用流量卸载，避免影响代理透明转发
-#   - IPv6 使用运营商提供的 LAN /64 前缀
-#   - LAN 采用 RA + SLAAC，不进行 IPv6 前缀继续委派
-#
-# ---------------------------------------------------------
-# 幂等性
-# ---------------------------------------------------------
-#   可重复执行。所有 list 型选项一律「先 delete 再 add_list」。
-#
-# 作为 uci-defaults 的运行说明（路径 files/etc/uci-defaults/）：
-#   - 仅在首次启动（含恢复出厂后的首次）执行一次；以 exit 0 结束后
-#     由系统自动删除，之后不再运行
-#   - 故「可重复执行」指手工 sh 执行时安全，不代表每次开机都跑
-#   - 首次启动时网络尚未就绪，脚本只做 uci 写入与 commit，
-#     不自动重启任何服务（符合 uci-defaults 规范）
-#   - 生效需重启，或手动按结尾提示的顺序 restart 各服务
-#
-# ⚠️ 行尾必须是 LF。CRLF 会让 shebang 变成 "/bin/sh\r"，
-#    脚本在路由器上静默不执行（见 N0）。
+# 设计原则：
+# 1. 保留官方 IPv6 工作方式
+# 2. DNS 交给 Mihomo 接管
+# 3. 禁止流量卸载避免绕过代理
+# 4. 针对 R2S 性能进行优化
 # =========================================================
 
 
+echo "===== YAIF R2S Fix Start ====="
+
+
+
 # =========================================================
-# 0. 前置备份
+# 0. 修改前备份配置
 # =========================================================
 
 BK="/root/yaif-adapt-backup-$(date +%Y%m%d-%H%M%S)"
+
 mkdir -p "$BK"
-cp -a /etc/config/dhcp      "$BK/dhcp"      2>/dev/null
-cp -a /etc/config/firewall  "$BK/firewall"  2>/dev/null
-cp -a /etc/config/network   "$BK/network"   2>/dev/null
+
+
+cp -a /etc/config/dhcp "$BK/dhcp" 2>/dev/null
+cp -a /etc/config/firewall "$BK/firewall" 2>/dev/null
+cp -a /etc/config/network "$BK/network" 2>/dev/null
 cp -a /etc/apk/repositories.d/distfeeds.list "$BK/distfeeds.list" 2>/dev/null
-echo "备份已保存到: $BK"
+
+
+echo "备份目录:"
+echo "$BK"
+
 
 
 # =========================================================
-# 1. 修正 ImmortalWrt APK 官方软件源
+# 1. 修正 ImmortalWrt 25.12 APK 软件源
 # =========================================================
+
 
 REPO="/etc/apk/repositories.d/distfeeds.list"
 
+
 if [ -f "$REPO" ]; then
 
-    sed -i \
-        -e 's#mirrors.vsean.net/immortalwrt#mirrors.ustc.edu.cn/immortalwrt#g' \
-        -e 's#mirrors.vsean.net/openwrt#mirrors.ustc.edu.cn/immortalwrt#g' \
-        "$REPO"
 
-    # 删除当前无实际内容的 video feed
-    sed -i \
-        -e '/video.*packages\.adb/d' \
-        "$REPO"
+    # 替换默认镜像源
+    # 方便国内网络访问
 
-    # F15 补：校验替换结果（原代码在镜像域名不匹配时静默无输出）
-    if grep -q 'mirrors.ustc.edu.cn' "$REPO"; then
+    sed -i \
+    -e 's#mirrors.vsean.net/immortalwrt#mirrors.ustc.edu.cn/immortalwrt#g' \
+    -e 's#mirrors.vsean.net/openwrt#mirrors.ustc.edu.cn/immortalwrt#g' \
+    "$REPO"
+
+
+
+    # 删除无实际用途的视频 feed
+    # R2S 无需保留
+
+    sed -i \
+    -e '/video.*packages\.adb/d' \
+    "$REPO"
+
+
+
+    if grep -q "mirrors.ustc.edu.cn" "$REPO"; then
+
         echo "软件源：已切换到 USTC"
+
     else
-        echo "软件源：未匹配到 mirrors.vsean.net，请手工检查 $REPO"
+
+        echo "软件源：请检查 distfeeds.list"
+
     fi
+
+
 else
-    echo "软件源：未找到 $REPO，跳过"
+
+    echo "未找到 APK 软件源配置"
+
 fi
 
 
+
+
 # =========================================================
-# 2. DNS / dnsmasq
-# =========================================================
+# 2. dnsmasq 设置
 #
-# DNS 由 Mihomo 统一处理。
-#
-# 清理 dnsmasq 的上游 / 过滤 / 缓存相关选项，使其退化为纯粹的
-# DHCP + RA 服务。下列选项在 dnsmasq 数据模型中均真实存在。
+# 目标：
+# DNS 解析交由 Mihomo TUN 接管
+# 避免 dnsmasq 二次过滤
 # =========================================================
 
-uci -q delete dhcp.@dnsmasq[0].dns_redirect
-uci -q delete dhcp.@dnsmasq[0].nonwildcard
-uci -q delete dhcp.@dnsmasq[0].boguspriv
-uci -q delete dhcp.@dnsmasq[0].filter_aaaa
-uci -q delete dhcp.@dnsmasq[0].filter_a
-uci -q delete dhcp.@dnsmasq[0].max_cache_ttl
-uci -q delete dhcp.@dnsmasq[0].min_cache_ttl
-uci -q delete dhcp.@dnsmasq[0].cachesize
-uci -q delete dhcp.@dnsmasq[0].noresolv
-
-# 清理 dnsmasq 强制上游
-#   理由：DNS 应全部交由 mihomo 处理，dnsmasq 不应指定上游。
-#   注：nft 的 dnat 劫持优先级更高，此项对 LAN 客户端实际不生效，
-#       清理目的是消除配置歧义 + 防止劫持异常时 DNS 回流到国内公共 DNS。
-uci -q delete dhcp.@dnsmasq[0].server
-
-# 【保留·需人工确认】filterwin2k
-#   dnsmasq 的 --filterwin2k 已在新版本中移除，OpenWrt 的 init 脚本
-#   是否还读取该 uci 项取决于固件版本。此处保留 delete（防御性清理，
-#   字段不存在时为 no-op，无副作用）。
-uci -q delete dhcp.@dnsmasq[0].filterwin2k
 
 
-# =========================================================
-# 3. LAN IPv6 RA / DHCPv6
-# =========================================================
-#
-# 家用 IPv6：
-#   RA = Server
-#   SLAAC = 启用（显式 '1'）
-#   DHCPv6 = 不启用（显式 disabled）
-#   RA Flags = none
-#   DNS Service = 关闭
-#
-# 注：dns_service='0' 会停掉 RA(RDNSS) / DHCPv6 的 DNS 通告。
-#     双栈客户端仍可从 DHCPv4 拿到 192.168.2.1，不受影响；
-#     纯 IPv6 客户端将没有 DNS。家用场景可接受。
-# =========================================================
+# 删除 DNS 重定向配置
+# 防止与 Mihomo DNS hijack 冲突
 
-# F4 补：RA 服务模式（原只依赖默认值）
-uci set dhcp.lan.ra='server'
+uci -q del dhcp.@dnsmasq[0].dns_redirect
 
-# F23 补：SLAAC 显式启用（原为 delete 后依赖默认值）
-uci set dhcp.lan.ra_slaac='1'
 
-# F11 修正：原为「仅 delete」，删掉后取 odhcpd 编译期默认值，
-#           与「DHCPv6 = 不启用」的意图不一致
-uci set dhcp.lan.dhcpv6='disabled'
 
-uci set dhcp.lan.ra_preference='medium'
+# 不监听通配符地址
+# 只监听实际配置接口
 
-uci -q delete dhcp.lan.ra_flags
-uci add_list dhcp.lan.ra_flags='none'
+uci -q del dhcp.@dnsmasq[0].nonwildcard
 
-uci set dhcp.lan.dns_service='0'
+
+
+# 删除 dnsmasq DNS 过滤功能
+# 由 Mihomo 规则系统处理
+
+uci -q del dhcp.@dnsmasq[0].boguspriv
+uci -q del dhcp.@dnsmasq[0].filterwin2k
+uci -q del dhcp.@dnsmasq[0].filter_aaaa
+uci -q del dhcp.@dnsmasq[0].filter_a
+
+
+
 
 
 # =========================================================
-# 4. Firewall
-# =========================================================
+# 3. 防火墙设置
 #
-# 【X2 已移除】defaults 段不再写 mtu_fix，并清理残留
-#   mtu_fix 是 **zone 段** 的选项，fw4 不从 defaults 读取。
-#   设备实测：firewall restart 报
-#       Section @defaults[0] specifies unknown option 'mtu_fix'
-#   故此处除「不写入」外，还要 delete 掉既有的残留项，否则警告持续。
-#   MSS 钳制改由 `config zone 'wan'` 的 `option mtu_fix '1'` 承担。
-#
-# FullCone NAT：禁用（'0'）
-#
-#   【已确认有效】upstream fw4 的 defaults 选项表中没有 fullcone，
-#   但本次 firewall restart 的输出里，fw4 只对 mtu_fix 报了
-#   unknown option，**没有对 fullcone 报错** —— 说明 ImmortalWrt
-#   25.12 的 fw4 扩展并接受了该字段。此项保留。
-#
-#   【v4 修正：原理由不成立】
-#     本配置没有 UDP TProxy。实际链路是：
-#       TCP -> nft redirect 到 mihomo 的端口
-#       UDP -> auto-route 进 TUN 设备，在 mihomo 处本地终结
-#     两者都不经过路由器的 nft NAT，所以 fullcone 对代理流量无影响。
-#
-#     真实影响面仅一类：经路由器 NAT 转发的 DIRECT UDP
-#     （被 cnip 排除的、或规则指向直连的）。
-#       '0'：对称 NAT，P2P/游戏主机穿透变差；conntrack 开销低
-#       '1'：直连 UDP NAT 类型更好；要求固件支持该扩展
-#
-# 禁用：
-#   Flow Offloading        （offload 绕过 netfilter，会破坏透明代理）
-#   Hardware Flow Offloading
-#   SYN Flood Protection   （家用路由器在光猫 NAT 之后，作用有限）
-#
-# 不启用：
-#   Invalid Conntrack 丢弃
+# 目标：
+# 保证 Mihomo TUN 透明代理完整接管流量
 # =========================================================
 
-# X2：清理 defaults 段的无效 mtu_fix 残留（消除 fw4 的 unknown option 警告）
-uci -q delete firewall.@defaults[0].mtu_fix
 
-# 【保留·需人工确认】syn_flood：官方标注为 "obsoleted by synflood_protect"
-#   删除它是清理旧字段，正当；字段若不存在则为 no-op。
-uci -q delete firewall.@defaults[0].syn_flood
 
-# 【保留·需人工确认】fullcone6：upstream 无此项，delete 为防御性清理
-uci -q delete firewall.@defaults[0].fullcone6
+# 关闭 SYN Flood 防护
+# 减少低性能设备额外处理
 
-uci -q delete firewall.@defaults[0].flow_offloading
-uci -q delete firewall.@defaults[0].flow_offloading_hw
+uci -q del firewall.@defaults[0].syn_flood
 
-uci set firewall.@defaults[0].drop_invalid='0'
-uci set firewall.@defaults[0].synflood_protect='0'
 
-# F1 修正：原为 '1'（启用），与上方注释意图相反
-uci set firewall.@defaults[0].fullcone='0'
 
-# ⚠️ 自相矛盾，保留但需实测：本段上方已 delete 过 fullcone6，这里又 set。
-#    若固件不支持该字段，重启会新增一条 unknown option 警告。
-#    验证：/etc/init.d/firewall restart 2>&1 | grep 'unknown option'
-#    -> 若报 fullcone6，删掉下面这一行（只保留上面的 delete）。
-uci set firewall.@defaults[0].fullcone6='0'
 
-# MSS 钳制由 zone 侧保证（defaults 段不写 mtu_fix，见 X2）
-uci set firewall.wan.mtu_fix='1'
+# 关闭 FullCone NAT
+# 保持 nftables 默认 NAT 行为
+
+uci -q del firewall.@defaults[0].fullcone
+uci -q del firewall.@defaults[0].fullcone6
+
+
+
+
+# 关闭软件流量卸载
+# 避免绕过 nftables 和 Mihomo TUN
+
+uci -q del firewall.@defaults[0].flow_offloading
+uci -q del firewall.@defaults[0].flow_offloading_hw
+
+
+
+
+# 防火墙区域设置  区域  wan拒绝主动转发
+
+uci set firewall.@zone[1].forward='REJECT'
+
+
+
 
 
 # =========================================================
-# 5. Network Globals
+# 4. LAN 网络设置
 # =========================================================
 
-# 删除默认 ULA 前缀（有公网 IPv6 就不该发 ULA）
-uci -q delete network.globals.ula_prefix
-
-# 开启 Packet Steering（R2S 弱 CPU 上有益）
-uci set network.globals.packet_steering='1'
-
-# 注意：globals.dhcp_default_duid 不动。
-#   删掉会重新生成 DUID -> 光猫侧视为新客户端 -> 可能拿到不同的 PD 前缀。
 
 
-# =========================================================
-# 6. LAN IPv4 / IPv6
-# =========================================================
-#
-# F22 撤销 F5：ipaddr 用 add_list，不用 set
-#   真实配置证据：loopback 段出厂即 `list ipaddr '127.0.0.1/8'`，
-#   lan 段也是 `list ipaddr '192.168.2.1/24'` —— 本环境 ipaddr 是
-#   ARRAY 类型，list 是规范写法。
-#
-# multipath / delegate 均为本环境实际存在的选项，保留。
-# =========================================================
+# 设置 LAN IPv4 地址
 
-uci -q delete network.lan.ipaddr
+uci -q del network.lan.ipaddr
+
 uci add_list network.lan.ipaddr='192.168.2.1/24'
 
+
+
+# 单 WAN 环境关闭 multipath
+
 uci set network.lan.multipath='off'
-uci set network.lan.delegate='0'
-uci set network.lan.ip6assign='64'
-uci set network.lan.ip6ifaceid='eui64'
+
+
+
+# LAN IPv6 恢复 ImmortalWrt 默认行为
+# 删除显式配置，让系统使用默认值
+
+uci -q del dhcp.lan.ra_slaac
+uci -q del dhcp.lan.dhcpv6
+uci set dhcp.lan.ra_preference='medium'
+
+
 
 
 # =========================================================
-# 7. WAN / WAN6 + device 层 MTU
-# =========================================================
-#
-# 【MTU 为什么写在 device 段】
-#
-# 链路：R2S(WAN 1492) -> 光猫(PPPoE 拨号 1492) -> 外网
-#
-# R2S 到光猫是以太网，物理 MTU 1500，但端到端真实路径是 PPPoE 的 1492。
-# 把 eth0 的 MTU 设为 1492 有两个作用：
-#   1) mtu_fix（zone 侧）据此算出正确 MSS = 1492 - 40 = 1452
-#      （若按 1500 算会得到 1460，大于路径允许值，钳制形同空转）
-#   2) R2S 自身出站报文不再需要光猫分片
-#
-# 【为什么必须写 device 段】
-#   MTU 是 device 层属性，不在 netifd iface_attrs[] 内，
-#   写在 interface 段不生效。
-#
-# 【mtu 与 mtu6】
-#   mtu  -> IPv4 MTU
-#   mtu6 -> IPv6 MTU，会写进 RA 通告给 LAN 客户端
-#   两者都设 1492，客户端的 v4/v6 MSS 才会都对（v4=1452, v6=1432）。
-#
-# 【为什么 eth0 一次就够】
-#   wan 与 wan6 的 device 都是 eth0（wan6 用 option device 'eth0'，
-#   不是 @wan 别名），所以改 wan 为 static 不会影响 wan6。
-#
-# 【MTU 取值的唯一依据：光猫的真实 PMTU】
-#   1492 是按「以太网 1500 - PPPoE 8 字节」推算的，不是实测值。
-#   若运营商侧还叠了 VLAN tag，真实 PMTU 可能是 1480（1500-8-4-8）。
-#   必须用 DF 位探测确认（命令见脚本结尾「验证要点 7」）：
-#     -s 1464 通、-s 1465 不通  -> PMTU 1492，保持现状
-#     -s 1452 通、-s 1453 不通  -> PMTU 1480，把下面的常量改成 1480
-#   只需改这一处常量，所有 device 段与 MSS 钳制会自动跟随。
+# 5. WAN 设置
 # =========================================================
 
-# ── MTU 常量（端到端路径的瓶颈值）─────────────
-MTU_PATH="${MTU_PATH:-1492}"
 
-# ── device 层 MTU 设置函数 ─────────────────
-# 用法: set_dev_mtu <设备名> <MTU>
-# 按 name 定位 config device 段并写入 mtu + mtu6；找不到则新建。
-set_dev_mtu() {
-    local tgt="$1" mtuv="$2" i=0 n
 
-    while [ "$i" -lt 64 ]; do
-        [ -z "$(uci -q show network.@device[$i] 2>/dev/null)" ] && break
-        n=$(uci -q get network.@device[$i].name 2>/dev/null)
-        if [ "$n" = "$tgt" ]; then
-            uci set network.@device[$i].mtu="$mtuv"
-            uci set network.@device[$i].mtu6="$mtuv"
-            echo "  device[$i] name=$tgt -> mtu/mtu6 $mtuv"
-            return 0
-        fi
-        i=$((i+1))
-    done
+# 保持 DHCP Client ID 默认行为
 
-    # 未找到 -> 新建
-    uci add network device >/dev/null 2>&1
-    uci set network.@device[$i].name="$tgt"
-    uci set network.@device[$i].mtu="$mtuv"
-    uci set network.@device[$i].mtu6="$mtuv"
-    echo "  device[$i] name=$tgt 新建 -> mtu/mtu6 $mtuv"
-}
+uci set network.wan.sendclientid='auto'
 
-echo "设置 device 层 MTU（MTU_PATH=$MTU_PATH）："
-set_dev_mtu 'eth0'   "$MTU_PATH"   # wan + wan6 共用（一次覆盖两个接口）
-set_dev_mtu 'br-lan' "$MTU_PATH"   # LAN 桥，决定 RA 里通告的 MTU
-set_dev_mtu 'eth1'   "$MTU_PATH"   # br-lan 成员口，须 >= master
-                                   # 注：此段在新配置里另有 option ipv6 '1'，
-                                   #     是有效 device 项，脚本不碰
-set_dev_mtu 'dummy0' "$MTU_PATH"   # N1：新配置新增的 device 段
 
-# ── WAN 静态 IPv4 ──────────────────────────
-uci set network.wan.proto='static'
-uci set network.wan.ipaddr='192.168.1.2'
-uci set network.wan.netmask='255.255.255.0'
-uci set network.wan.gateway='192.168.1.1'
+# 单线路关闭 multipath
 
-# 【X1 已移除】network.wan.peerdns
-#   原脚本设 peerdns='0'，但 peerdns 只有 dhcp / dhcpv6 / pppoe 的
-#   handler 会读取；wan 已是 static，没有任何代码路径引用它。
-#   脚本现在完全不碰这一项。
+uci set network.wan.multipath='off'
 
-# F2 补：先清空再追加，否则 add_list 会累积
-uci -q delete network.wan.dns
-uci add_list network.wan.dns='223.5.5.5'
-uci add_list network.wan.dns='119.29.29.29'
 
-# interface 段的 mtu 是无效选项（不在 iface_attrs[] 内）。
-# 此处只做清理，不写入（F24）。
-uci -q delete network.wan.mtu
-uci -q delete network.lan.mtu
 
-# --- WAN6（IPv6）：dhcpv6 协议，peerdns 有效 ---
-#   peerdns='0' 阻止采纳光猫下发的 DNS，让 IPv6 DNS 交由 mihomo 处理。
-uci -q delete network.wan6.dns
-uci set network.wan6.peerdns='0'
 
-# N2：新刷机后 wan6 段不再自带 reqaddress / reqprefix，此处显式化。
-#   【实测】不写也能拿到 PD 前缀（dhcpv6.sh 默认就会请求 IA_PD），
-#   所以这三行属于「显式化 + 防固件变更」，不是必需项。
-#   若将来确认固件默认稳定，删掉这三行不影响 IPv6 功能。
+
+# =========================================================
+# 6. WAN6 IPv6 设置
+# =========================================================
 #
-#     reqaddress='try'  : 尝试获取 wan 侧 IPv6 地址
-#     reqprefix='auto'  : 请求 PD 前缀（LAN 公网 /64 的来源）
-#     norelease='1'     : 重启时不发 RELEASE，减缓前缀漂移
-#                         （本机实测前缀会从 7ef0/7ef1 漂到 3d10/3d12）
+# 适用于：
+# 电信 IPv6 DHCPv6-PD
+#
+# 保持前缀稳定
+# =========================================================
+
+
+
 uci set network.wan6.reqaddress='try'
+
 uci set network.wan6.reqprefix='auto'
+
+
+# 不主动释放 IPv6 前缀
+
 uci set network.wan6.norelease='1'
 
-# sendclientid 不写：odhcp6c 默认即 auto，无需显式化。
+
+uci set network.wan6.sendclientid='auto'
+
+
+uci set network.wan6.multipath='off'
+
+
+
 
 
 # =========================================================
-# 8. 保存配置
+# 7. 保存配置
 # =========================================================
+
 
 uci commit dhcp
+
 uci commit firewall
+
 uci commit network
 
 
-# =========================================================
-# 9. 完成前的自检
-# =========================================================
 
-echo ""
-echo "===== 自检结果 ====="
-echo "[dnsmasq]"
-printf "  server        : %s\n" "$(uci -q get dhcp.@dnsmasq[0].server || echo '(已清空 OK)')"
-printf "  dns_redirect  : %s\n" "$(uci -q get dhcp.@dnsmasq[0].dns_redirect || echo '(已清空 OK)')"
-echo "[firewall]"
-printf "  fullcone      : %s  (预期 0)\n" "$(uci -q get firewall.@defaults[0].fullcone)"
-printf "  synflood_protect: %s  (预期 0)\n" "$(uci -q get firewall.@defaults[0].synflood_protect)"
-printf "  drop_invalid  : %s  (预期 0)\n" "$(uci -q get firewall.@defaults[0].drop_invalid)"
-printf "  flow_offloading: %s  (预期空)\n" "$(uci -q get firewall.@defaults[0].flow_offloading || echo '(无 OK)')"
-printf "  zone.wan.mtu_fix: %s  (预期 1 —— MSS 钳制的真实来源)\n" "$(uci -q get firewall.wan.mtu_fix)"
-printf "  zerotier 残留 : %s  (预期 0)\n" "$(uci show firewall 2>/dev/null | grep -c zerotier)"
-echo "[network]"
-printf "  lan.ipaddr    : %s\n" "$(uci -q get network.lan.ipaddr)"
-printf "  lan.ip6assign : %s\n" "$(uci -q get network.lan.ip6assign)"
-printf "  packet_steering: %s\n" "$(uci -q get network.globals.packet_steering)"
-printf "  ula_prefix    : %s  (预期空)\n" "$(uci -q get network.globals.ula_prefix || echo '(无 OK)')"
-echo "[已移除的无效字段 —— 预期脚本不再写入]"
-printf "  wan.peerdns   : %s  (脚本不设置，static 下无意义)\n" "$(uci -q get network.wan.peerdns || echo '(未设置)')"
-printf "  defaults.mtu_fix: %s  (预期空 —— 已删除，fw4 不接受该字段)\n" "$(uci -q get firewall.@defaults[0].mtu_fix || echo '(已删除 OK)')"
-echo "[interface 段残留 MTU —— 预期为空]"
-printf "  wan.mtu       : %s\n" "$(uci -q get network.wan.mtu || echo '(无 OK)')"
-printf "  lan.mtu       : %s\n" "$(uci -q get network.lan.mtu || echo '(无 OK)')"
-echo "[device MTU —— 真正生效的地方，预期全部 1492]"
-uci show network 2>/dev/null | grep -E "@device\[[0-9]+\]\.(name|mtu|mtu6)=" || echo "  (无 device 段!)"
-echo "[dhcp / RA]"
-printf "  lan.ra        : %s  (预期 server)\n" "$(uci -q get dhcp.lan.ra)"
-printf "  lan.ra_slaac  : %s  (预期 1)\n" "$(uci -q get dhcp.lan.ra_slaac)"
-printf "  lan.dhcpv6    : %s  (预期 disabled)\n" "$(uci -q get dhcp.lan.dhcpv6 || echo '(未设置!)')"
-printf "  lan.dns_service: %s  (预期 0)\n" "$(uci -q get dhcp.lan.dns_service)"
-echo "[WAN DNS]"
-printf "  wan.dns       : %s\n" "$(uci -q get network.wan.dns || echo '(未设置)')"
-printf "  wan6.dns      : %s\n" "$(uci -q get network.wan6.dns || echo '(未设置 OK，预期如此)')"
-printf "  wan6.peerdns  : %s  (预期 0，dhcpv6 下有效)\n" "$(uci -q get network.wan6.peerdns)"
-printf "  wan6.reqprefix: %s  (预期 auto —— LAN 公网 /64 的来源)\n" "$(uci -q get network.wan6.reqprefix)"
-printf "  wan6.reqaddress: %s  (预期 try)\n" "$(uci -q get network.wan6.reqaddress)"
-echo "[转发开关]"
-printf "  ipv4 forward  : %s\n" "$(sysctl -n net.ipv4.ip_forward)"
-printf "  ipv6 forward  : %s\n" "$(sysctl -n net.ipv6.conf.all.forwarding)"
 
-echo ""
-echo "注意：本脚本不自动重启服务，避免中断网络。"
-echo "如需生效，手动执行（顺序不要变）："
-echo "  /etc/init.d/network restart"
-echo "  /etc/init.d/dnsmasq restart"
-echo "  /etc/init.d/firewall restart"
-echo "  /etc/init.d/clashoo restart    # 必须最后"
+echo
 
-echo ""
-echo "===== 可疑引用：需在设备上人工确认 ====="
-echo ""
-echo "【已由本次 firewall restart 实锤确认】"
-echo "  mtu_fix   -> fw4 报 unknown option，defaults 段不接受 -> 已删除"
-echo "  fullcone  -> fw4 未报错，ImmortalWrt 25.12 接受 -> 保留"
-echo ""
-echo "【仍需确认】"
-echo ""
-echo "  # 1) fullcone6 是否存在（本次未被报错，可能只是没配置过）"
-echo "  grep -n 'fullcone' /usr/share/ucode/fw4.uc"
-echo ""
-echo "  # 2) dnsmasq init 是否还读 filterwin2k"
-echo "  grep -n 'filterwin2k' /etc/init.d/dnsmasq"
-echo "  -> 无输出 = 字段已废弃，那行 delete 可删（删不删都无害）"
-echo ""
-echo "  # 3) netifd 是否识别 multipath（用户已确认 25.12 存在）"
-echo "  grep -rn 'multipath' /lib/netifd/ 2>/dev/null | head"
-echo ""
-echo "【N4 已结案】udhcpc discover / no lease"
-echo "  实测：ps w | grep '[u]dhcpc' 无输出（无常驻进程），且配置中"
-echo "        无 proto='dhcp' 接口 -> 一次性探测后自行退出，无害。"
-echo ""
-echo "===== 验证要点 ====="
-echo "  ★ 本脚本的主线目标：设备 MTU 与光猫 PPPoE 的 PMTU 对齐 ★"
-echo ""
-echo "  1) MTU 是否真落到设备（配置层 -> 内核）："
-echo "       ip link show eth0 | head -1 ; ip link show br-lan | head -1"
-echo "       ip link show eth1 | head -1 ; ip link show dummy0 | head -1"
-echo "       -> 四条都应为 mtu $MTU_PATH"
-echo "  2) IPv6 MTU（RA 通告给 LAN 客户端的值）："
-echo "       cat /proc/sys/net/ipv6/conf/br-lan/mtu    # 期望 $MTU_PATH"
-echo "  3) MSS 钳制是否生成（依赖 zone 的 mtu_fix + device MTU）："
-echo "       nft list ruleset | grep -i 'maxseg size'"
-echo "       -> 期望 'tcp option maxseg size set rt mtu'"
-echo "          （= --clamp-mss-to-pmtu，按出接口实际 MTU 动态计算，"
-echo "             非字面量数值；无输出说明 zone 的 mtu_fix 未生效）"
-echo ""
-echo "  7) 【最关键】光猫的真实 PMTU —— 决定 MTU_PATH 该填多少"
-echo "     ⚠️ 25.12 默认的 ping 是 busybox，**不支持 -M do**"
-echo "        （-M 是 iputils-ping 专属参数）。以下三种测法任选。"
-echo ""
-echo "     方案 A（推荐，零依赖）：用 IPv6 探测"
-echo "       IPv6 不允许中间分片，超 PMTU 必回 Packet Too Big，"
-echo "       天然等价于 DF 探测，busybox 也能用。"
-echo "       for s in 1452 1444 1432; do \\"
-echo "         printf 'IPv6 payload %s: ' \$s; \\"
-echo "         ping -6 -c1 -W2 -s \$s 2400:3200::1 >/dev/null 2>&1 \\"
-echo "           && echo OK || echo FAIL; \\"
-echo "       done"
-echo "     # 载荷 + 8(ICMPv6) + 40(IPv6 头) = IPv6 包长"
-echo "     #   -s 1452 -> 1500   期望 FAIL（超过 PPPoE）"
-echo "     #   -s 1444 -> 1492   期望 OK"
-echo "     #   -s 1432 -> 1480   期望 OK"
-echo "     -> 1444 OK 且 1452 FAIL => PMTU=1492，MTU_PATH 保持不动"
-echo "     -> 1444 FAIL 但 1432 OK => PMTU=1480（叠了 VLAN tag），"
-echo "        把段 7 的 MTU_PATH 改成 1480 后重跑"
-echo ""
-echo "     方案 B：装 iputils 后走 IPv4 的 -M do"
-echo "       apk add iputils-ping"
-echo "       ping -c1 -W2 -M do -s 1464 223.5.5.5   # 1492 包，期望通"
-echo "       ping -c1 -W2 -M do -s 1472 223.5.5.5   # 1500 包，期望不通"
-echo ""
-echo "     方案 C（最权威，零猜测）：进光猫管理界面直接读"
-echo "        WAN / PPPoE 口的 MTU 值。电脑临时设 192.168.1.3/24，"
-echo "        网关 192.168.1.1，浏览器进 192.168.1.1 查看。"
-echo ""
-echo "  4) wan.dns 必须写成 list："
-echo "       uci show network.wan.dns"
-echo "       -> 应为  '223.5.5.5' '119.29.29.29'   两个独立引号"
-echo "  5) interface 段不应再有 mtu："
-echo "       uci show network.wan; uci show network.lan | grep -i mtu"
-echo "  6) LAN 地址与 IPv6 前缀："
-echo "       ubus call network.interface.lan status | grep -A4 ipv4-address"
-echo "       ip -6 addr show br-lan | grep inet6"
-echo ""
-echo "备份目录: $BK"
+echo "===== YAIF Fix Complete ====="
+
+echo
+
+echo "备份目录:"
+echo "$BK"
+
+echo
+
+echo "建议重启:"
+echo "reboot"
+
 
 exit 0
